@@ -3,7 +3,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -61,11 +60,6 @@ function ComposerPage() {
     (group) => !collection || collection.groupIds.includes(group.id),
   );
 
-  const selectedGroups = groups.filter((group) => selected.includes(group.id));
-  const breakdown = selectedGroups.reduce<Record<string, number>>((map, group) => {
-    map[group.category] = (map[group.category] ?? 0) + 1;
-    return map;
-  }, {});
   const lines = postText ? postText.split(/\r\n|\r|\n/).length : 0;
   const estimateSeconds = settings
     ? selected.length * ((settings.minDelaySeconds + settings.maxDelaySeconds) / 2 + 20)
@@ -93,12 +87,12 @@ function ComposerPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Post Composer</h1>
+        <h1 className="text-2xl font-bold">New Post</h1>
         <p className="text-sm text-muted-foreground">
-          Paste your finished post, pick the target groups, and create a posting queue.
+          Write your post, choose your groups, and send.
           {settings?.autoSubmitEnabled
-            ? " Auto-submit is ON — the app will click Post for you."
-            : " Human review — the app fills the box and waits for you to post."}
+            ? " The app will click Post for you."
+            : " The app fills in your post and waits for you to click Post."}
         </p>
       </div>
 
@@ -109,7 +103,7 @@ function ComposerPage() {
       <div className="grid min-w-0 gap-4 xl:grid-cols-[1fr_1.2fr_1fr]">
         <Card className="min-w-0">
           <CardHeader>
-            <CardTitle className="text-base">Prepared Post Copy</CardTitle>
+            <CardTitle className="text-base">Your post</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <Textarea
@@ -129,7 +123,7 @@ function ComposerPage() {
 
         <Card className="min-w-0">
           <CardHeader>
-            <CardTitle className="text-base">Group Selection</CardTitle>
+            <CardTitle className="text-base">Choose groups</CardTitle>
           </CardHeader>
           <CardContent className="flex min-w-0 flex-col gap-3">
             <GroupFilters
@@ -215,61 +209,32 @@ function ComposerPage() {
 
         <Card className="min-w-0">
           <CardHeader>
-            <CardTitle className="text-base">Queue Preview</CardTitle>
+            <CardTitle className="text-base">Review &amp; send</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <div className="max-h-[160px] overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-sm">
               {postText || "Post preview will appear here after you paste prepared copy."}
             </div>
             <dl className="grid grid-cols-2 gap-y-1 text-sm">
-              <dt className="text-muted-foreground">Group count</dt>
+              <dt className="text-muted-foreground">Groups selected</dt>
               <dd className="font-medium">{selected.length}</dd>
-              <dt className="text-muted-foreground">Estimated session</dt>
+              <dt className="text-muted-foreground">Estimated time</dt>
               <dd className="font-medium">{Math.ceil(estimateSeconds / 60)} min</dd>
-              <dt className="text-muted-foreground">Mode</dt>
-              <dd className="font-medium">
-                {settings?.autoSubmitEnabled ? "Auto-submit" : "Human review"}
-              </dd>
             </dl>
-            {Object.keys(breakdown).length ? (
-              <div className="flex flex-wrap gap-1.5">
-                {Object.entries(breakdown).map(([name, count]) => (
-                  <Badge key={name} variant="secondary">
-                    {name}: {count}
-                  </Badge>
-                ))}
-              </div>
-            ) : null}
-            {settings && selected.length > settings.maxGroupsPerSession * 0.8 ? (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  Large queue selected. Current limit is {settings.maxGroupsPerSession} groups per
-                  session.
-                </AlertDescription>
-              </Alert>
-            ) : null}
             {selected.length > 5 ? (
               <Alert variant="destructive">
                 <AlertDescription>
-                  More than 5 groups selected. Run a one-group test before using a larger queue.
+                  You picked more than 5 groups. Try one group first to make sure it works.
                 </AlertDescription>
               </Alert>
             ) : null}
-            {selected.length !== 1 ? (
-              <Button
-                variant="outline"
-                disabled={!filtered.length && !selected.length}
-                onClick={selectOneGroup}
-              >
-                Set up one-group test
-              </Button>
-            ) : null}
             <Button
+              className="h-12"
               disabled={!postText.trim() || !selected.length || creating}
               onClick={() => void createSession()}
               data-tour="compose-create-queue"
             >
-              Create queue preview
+              {creating ? "Creating…" : "Create post queue"}
             </Button>
           </CardContent>
         </Card>

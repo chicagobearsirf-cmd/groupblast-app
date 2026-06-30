@@ -20,7 +20,6 @@ import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StatusBadge } from "@/components/groups/GroupStatusBadge";
 import { ResultsTable } from "@/components/history/ResultsTable";
-import { RunnerDebugPanel } from "@/components/queue/RunnerDebugPanel";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { useForceStop, useSessionAction, useSessionStatus, useSettings } from "@/hooks/use-api";
@@ -43,14 +42,14 @@ function QueuePage() {
   if (!status.session) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-bold">Queue / Session</h1>
+        <h1 className="text-2xl font-bold">Scheduled</h1>
         <EmptyState
-          title="No session queued"
-          text="Use the Post Composer to create a session first."
+          title="Nothing scheduled yet"
+          text="Write a post on the New Post page to schedule it here."
         />
         <div>
           <Button asChild>
-            <Link to="/compose">Open Post Composer</Link>
+            <Link to="/compose">Go to New Post</Link>
           </Button>
         </div>
       </div>
@@ -75,7 +74,7 @@ function QueuePage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Queue / Session</h1>
+        <h1 className="text-2xl font-bold">Scheduled</h1>
         <StatusBadge
           status={status.session.state === "running" ? "active" : "needs_review"}
           label={status.session.state}
@@ -84,7 +83,7 @@ function QueuePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Current Session</CardTitle>
+          <CardTitle className="text-base">Posting now</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -114,30 +113,12 @@ function QueuePage() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-3">
             <StatsCard
               title="Posted"
               value={status.counts.posted}
               icon={CheckCheck}
-              description="Confirmed by user"
-            />
-            <StatsCard
-              title="Skipped"
-              value={status.counts.skipped}
-              icon={SkipForward}
-              description="Moved past"
-            />
-            <StatsCard
-              title="Failed"
-              value={status.counts.failed}
-              icon={XOctagon}
-              description="Logged failures"
-            />
-            <StatsCard
-              title="Needs Review"
-              value={status.counts.needs_review}
-              icon={ShieldAlert}
-              description="Manual attention"
+              description="Done"
             />
             <StatsCard
               title="Remaining"
@@ -145,63 +126,88 @@ function QueuePage() {
               icon={ListTodo}
               description="Groups left"
             />
+            <StatsCard
+              title="Needs Review"
+              value={status.counts.needs_review}
+              icon={ShieldAlert}
+              description="Need attention"
+            />
           </div>
 
+          {/* Primary controls — the buttons users press most */}
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => act("start", "Session started.")}>
+            <Button className="h-11" onClick={() => act("start", "Started.")}>
               <Play className="mr-2 h-4 w-4" /> Start
             </Button>
-            <Button variant="outline" onClick={() => act("pause", "Session paused.")}>
+            <Button className="h-11" variant="outline" onClick={() => act("pause", "Paused.")}>
               <Pause className="mr-2 h-4 w-4" /> Pause
             </Button>
-            <Button variant="outline" onClick={() => act("resume", "Session resumed.")}>
+            <Button className="h-11" variant="outline" onClick={() => act("resume", "Resumed.")}>
               <Play className="mr-2 h-4 w-4" /> Resume
             </Button>
-            <Button variant="outline" onClick={() => act("skip", "Skipped current group.")}>
+            <Button className="h-11" variant="outline" onClick={() => act("skip", "Skipped.")}>
               <SkipForward className="mr-2 h-4 w-4" /> Skip
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => act("continue-next", "Continued to next group.")}
-            >
-              <StepForward className="mr-2 h-4 w-4" /> Continue Next
-            </Button>
-            <Button variant="outline" onClick={() => act("open-current", "Current group opened.")}>
-              <ExternalLink className="mr-2 h-4 w-4" /> Open Current Group
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => act("retry-current", "Retrying current group.")}
-            >
-              <RotateCcw className="mr-2 h-4 w-4" /> Retry This Group
-            </Button>
-            <Button
-              className="bg-emerald-600 text-white hover:bg-emerald-700"
-              onClick={() => act("mark-posted", "Marked posted.")}
-            >
-              <CheckCircle2 className="mr-2 h-4 w-4" /> Mark Posted
-            </Button>
-            <Button variant="destructive" onClick={() => act("mark-failed", "Marked failed.")}>
-              <XCircle className="mr-2 h-4 w-4" /> Mark Failed
-            </Button>
-            <Button
-              variant="outline"
-              className="border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300"
-              onClick={() => act("mark-pending-admin-review", "Marked pending admin review.")}
-            >
-              <ShieldAlert className="mr-2 h-4 w-4" /> Mark Pending Admin Review
-            </Button>
-            <Button variant="outline" onClick={() => act("stop", "Session stopped.")}>
+            <Button className="h-11" variant="outline" onClick={() => act("stop", "Stopped.")}>
               <Square className="mr-2 h-4 w-4" /> Stop
             </Button>
-            <Button
-              variant="destructive"
-              disabled={forceStop.isPending}
-              onClick={() => forceStop.mutate()}
-              title="Use this if the app is stuck and won't start a new queue (e.g. after closing the browser mid-run). Clears everything and closes the automation browser."
-            >
-              <XOctagon className="mr-2 h-4 w-4" /> Force Stop / Reset
-            </Button>
+          </div>
+
+          {/* Review actions — after you post in Facebook yourself */}
+          <div className="rounded-md border p-3">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              After you review a post in the browser:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                className="bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={() => act("mark-posted", "Marked posted.")}
+              >
+                <CheckCircle2 className="mr-2 h-4 w-4" /> Mark Posted
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300"
+                onClick={() => act("mark-pending-admin-review", "Marked pending review.")}
+              >
+                <ShieldAlert className="mr-2 h-4 w-4" /> Pending Approval
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => act("mark-failed", "Marked failed.")}>
+                <XCircle className="mr-2 h-4 w-4" /> Mark Failed
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => act("open-current", "Opened current group.")}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" /> Open Group
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => act("retry-current", "Retrying.")}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" /> Retry
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => act("continue-next", "Continued.")}
+              >
+                <StepForward className="mr-2 h-4 w-4" /> Next
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={forceStop.isPending}
+                onClick={() => forceStop.mutate()}
+                title="Use this if the app is stuck and won't start a new queue. Clears everything and closes the automation browser."
+              >
+                <XOctagon className="mr-2 h-4 w-4" /> Force Reset
+              </Button>
+            </div>
           </div>
 
           <Alert>
@@ -268,14 +274,12 @@ function QueuePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Session Results</CardTitle>
+          <CardTitle className="text-base">Results</CardTitle>
         </CardHeader>
         <CardContent>
           <ResultsTable results={status.results} />
         </CardContent>
       </Card>
-
-      <RunnerDebugPanel diagnostics={status.diagnostics} />
     </div>
   );
 }
