@@ -106,11 +106,12 @@ function showLoadingWindow() {
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
   mainWindow.loadURL(
-    "data:text/html," +
+    "data:text/html;charset=utf-8," +
       encodeURIComponent(
-        `<body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:-apple-system,Segoe UI,sans-serif;background:#fff;color:#1e293b">
+        `<!doctype html><html><head><meta charset="utf-8"></head>
+         <body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:-apple-system,Segoe UI,sans-serif;background:#fff;color:#1e293b">
          <div style="text-align:center"><h1 style="font-size:28px;margin:0 0 8px">GroupBlast</h1>
-         <p style="color:#64748b">Starting up… this takes a few seconds the first time.</p></div></body>`,
+         <p style="color:#64748b">Starting up... this takes a few seconds the first time.</p></div></body></html>`,
       ),
   );
 }
