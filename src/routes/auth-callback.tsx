@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { brand } from "@/lib/brand";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export const Route = createFileRoute("/auth-callback")({
   component: AuthCallbackPage,
@@ -10,28 +11,44 @@ export const Route = createFileRoute("/auth-callback")({
 function AuthCallbackPage() {
   const [status, setStatus] = useState<"processing" | "done" | "error">("processing");
 
-  useEffect(() => {
-    const hash = window.location.hash.substring(1);
-    const params = new URLSearchParams(hash);
-    const access_token = params.get("access_token");
-    const refresh_token = params.get("refresh_token");
-
-    if (!access_token || !refresh_token) {
+useEffect(() => {
+  const attemptRelay = async () => {
+    const client = getSupabaseClient();
+    if (!client) {
+      setStatus("error");
+      return;
+    }
+    
+    // Wait for Supabase to process the magic link hash
+    await new Promise(r => setTimeout(r, 500));
+    
+    // Read the session from Supabase (it already processed the hash)
+    const { data: { session } } = await client.auth.getSession();
+    
+    if (!session?.access_token || !session?.refresh_token) {
       setStatus("error");
       return;
     }
 
-    fetch("http://localhost:3001/api/auth/session-relay", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ access_token, refresh_token }),
-    })
-      .then((res) => {
-        if (res.ok) setStatus("done");
-        else setStatus("error");
-      })
-      .catch(() => setStatus("error"));
-  }, []);
+    // POST tokens to the relay for Electron to pick up
+    try {
+      const res = await fetch("http://localhost:3001/api/auth/session-relay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          access_token: session.access_token, 
+          refresh_token: session.refresh_token 
+        }),
+      });
+      if (res.ok) setStatus("done");
+      else setStatus("error");
+    } catch {
+      setStatus("error");
+    }
+  };
+  
+  attemptRelay();
+}, []);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-white px-4 text-[#0f172a]">
