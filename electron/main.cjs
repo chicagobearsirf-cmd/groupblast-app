@@ -128,8 +128,11 @@ app.whenReady().then(async () => {
   startApiServer();
   startWebServer();
   try {
-    await waitForServer(WEB_PORT, 90000);
-    log("Servers ready, loading app...");
+    await Promise.all([
+      waitForServer(API_PORT, 90000),
+      waitForServer(WEB_PORT, 90000),
+    ]);
+    log("All servers ready, loading app...");
     if (mainWindow) {
       mainWindow.loadURL(`http://localhost:${WEB_PORT}`);
       mainWindow.webContents.setWindowOpenHandler(({ url }) => {
