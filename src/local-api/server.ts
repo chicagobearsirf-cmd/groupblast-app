@@ -72,6 +72,30 @@ app.get("/api/health", (_req, res) =>
   }),
 );
 
+// Auth session relay: the magic-link callback page (running in the system
+// browser) posts tokens here; the Electron app polls to pick them up.
+let pendingSession: { access_token: string; refresh_token: string } | null = null;
+let pendingSessionExpiry = 0;
+
+app.post("/api/auth/session-relay", (req, res) => {
+  const { access_token, refresh_token } = req.body ?? {};
+  if (!access_token || !refresh_token) {
+    return res.status(400).json({ error: "access_token and refresh_token required" });
+  }
+  pendingSession = { access_token, refresh_token };
+  pendingSessionExpiry = Date.now() + 10 * 60 * 1000;
+  res.json({ ok: true });
+});
+
+app.get("/api/auth/session-relay", (_req, res) => {
+  if (pendingSession && Date.now() < pendingSessionExpiry) {
+    const session = pendingSession;
+    pendingSession = null;
+    return res.json({ ok: true, session });
+  }
+  res.json({ ok: true, session: null });
+});
+
 app.get("/api/groups", (req, res) => {
   res.json(
     storage.listGroups({

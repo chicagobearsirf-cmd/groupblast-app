@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Mail, CheckCircle2 } from "lucide-react";
+import { Mail, CheckCircle2, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
-  const { mode, cloudUnavailable, signInWithMagicLink } = useAuth();
+  const { mode, cloudUnavailable, signInWithMagicLink, awaitingMagicLink } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -53,7 +53,11 @@ function LoginPage() {
               <div className="space-y-4">
                 <div className="flex justify-center">
                   <div className="rounded-full bg-green-100 p-3">
-                    <CheckCircle2 className="h-6 w-6 text-green-600" />
+                    {awaitingMagicLink ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-green-600" />
+                    ) : (
+                      <CheckCircle2 className="h-6 w-6 text-green-600" />
+                    )}
                   </div>
                 </div>
                 <div className="text-center">
@@ -61,6 +65,11 @@ function LoginPage() {
                   <p className="mt-2 text-sm text-muted-foreground">
                     We sent a login link to <strong>{email}</strong>. Click it to log in.
                   </p>
+                  {awaitingMagicLink ? (
+                    <p className="mt-3 text-sm font-medium text-[#1e3a5f]">
+                      Waiting for you to click the link… this page will update automatically.
+                    </p>
+                  ) : null}
                   <p className="mt-4 text-xs text-muted-foreground">
                     You'll stay logged in on this device.
                   </p>

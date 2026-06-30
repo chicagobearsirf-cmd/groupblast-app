@@ -147,7 +147,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   const { status, mode } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const isAuthPage = location.pathname === "/login" || location.pathname === "/signup";
+  const isAuthPage = location.pathname === "/login" || location.pathname === "/signup" || location.pathname === "/auth-callback";
 
   useEffect(() => {
     if (mode !== "local" && status === "unauthenticated" && !isAuthPage) {
