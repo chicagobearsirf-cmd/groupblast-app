@@ -141,6 +141,7 @@ function RootShell({ children }: { children: ReactNode }) {
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AuthProvider, useAuth } from "@/components/auth/auth-context";
+import { TrialGate } from "@/components/TrialGate";
 
 function AuthGate({ children }: { children: ReactNode }) {
   const { status, mode } = useAuth();
@@ -176,7 +177,9 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <AuthGate>
-          <AppLayout />
+          <TrialGate>
+            <AppLayout />
+          </TrialGate>
         </AuthGate>
       </AuthProvider>
     </QueryClientProvider>
