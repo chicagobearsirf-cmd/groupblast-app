@@ -4,7 +4,7 @@ import { useAuth } from "@/components/auth/auth-context";
 import { Button } from "@/components/ui/button";
 import { usePlanStatus } from "@/hooks/use-plan-status";
 
-const contactEmail = "chicagobearsirf@gmail.com";
+const contactEmail = "guysadwise@gmail.com";
 
 function TrialBanner({ daysRemaining }: { daysRemaining: number }) {
   const label = daysRemaining === 1 ? "1 day remaining" : `${daysRemaining} days remaining`;
