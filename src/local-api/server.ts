@@ -19,6 +19,20 @@ const param = (value: string | string[] | undefined) =>
 
 app.use(express.json({ limit: "5mb" }));
 
+// Allow the local Vite dev server (port 8080) and the packaged Electron renderer
+// to call this API. The auth-callback page runs in the system browser and needs
+// this to POST tokens to the session-relay endpoint.
+app.use((req, res, next) => {
+  const origin = req.headers.origin ?? "";
+  if (origin === "http://localhost:8080" || origin === "http://127.0.0.1:8080") {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  }
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 // Capture any { error } body so the dev request logger can show a short reason
 // without us logging full payloads or Facebook cookies.
 app.use((_req, res, next) => {
