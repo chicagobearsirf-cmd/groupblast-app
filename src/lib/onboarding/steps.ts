@@ -12,10 +12,10 @@ export type TourStep = {
   placement?: "top" | "bottom" | "left" | "right";
 };
 
-// Ordered path a brand-new buddy follows: connect Facebook -> install the
-// helper -> get groups in -> write a post -> run a safe one-group test -> learn
-// the auto-submit + don't-touch-the-screen rules. Step numbers are shown by the
-// overlay ("Step X of N"), so titles stay number-free to avoid renumber bugs.
+// Ordered path a brand-new buddy follows: connect Facebook -> add groups ->
+// write a post -> run a safe one-group test -> learn the auto-submit +
+// don't-touch-the-screen rules. Step numbers are shown by the overlay
+// ("Step X of N"), so titles stay number-free to avoid renumber bugs.
 export const TOUR_STEPS: TourStep[] = [
   {
     id: "welcome",
@@ -40,27 +40,19 @@ export const TOUR_STEPS: TourStep[] = [
     placement: "top",
   },
   {
-    id: "extension",
-    route: "/",
-    target: "nav-extension",
-    title: "Install the browser helper",
-    body: "Open the Extension page to download our 1-click Chrome helper — it grabs the groups you're already in so you don't paste links by hand. The page has the download button and step-by-step install, plus a help link if you get stuck.",
-    placement: "right",
-  },
-  {
     id: "import",
     route: "/",
     target: "nav-import",
-    title: "Get your groups in",
-    body: "Open Import to add the Facebook groups you want to post to — paste links, or pull in everything the browser helper captured.",
+    title: "Add your groups",
+    body: "Click “Add Groups” to add the Facebook groups you want to post to. Paste the group links here — this is a one-time setup, your list is saved for next time.",
     placement: "right",
   },
   {
     id: "groups",
     route: "/groups",
     target: "nav-groups",
-    title: "Your group library",
-    body: "Every group you import lives here. You can sort them into categories so you can target the right ones later. This is your reusable list.",
+    title: "Your group list",
+    body: "Every group you add lives under “My Groups.” This is your reusable list — you pick which ones to post to each time.",
     placement: "right",
   },
   {
@@ -92,7 +84,7 @@ export const TOUR_STEPS: TourStep[] = [
     route: "/compose",
     target: "nav-queue",
     title: "Run and watch",
-    body: "The Queue page is where you press Start and watch each group post in turn. Your History page keeps a record of every result.",
+    body: "The “Scheduled” page is where you press Start and watch each group post in turn. The History page keeps a record of every result.",
     placement: "right",
   },
   {
@@ -113,6 +105,6 @@ export const TOUR_STEPS: TourStep[] = [
     id: "finish",
     route: "/",
     title: "You're set 🎉",
-    body: "That's the whole loop: log in → install helper → import → write → test one group → run (hands off while it works). Reopen this tour anytime from “Getting started” in the top bar. Go run a one-group test.",
+    body: "That's the whole loop: log into Facebook → add groups → write your post → test one group → run it (hands off while it works). Reopen this tour anytime from “Getting started” in the top bar. Go run a one-group test.",
   },
 ];
