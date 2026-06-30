@@ -1,8 +1,8 @@
 #!/bin/bash
-# Double-click this file to start PostPilot. No terminal typing required.
+# Double-click this file to start GroupBlast. No terminal typing required.
 cd "$(dirname "$0")"
 
-echo "Starting PostPilot..."
+echo "Starting GroupBlast..."
 echo ""
 
 # One-time setup: install dependencies if this is the first run.
@@ -26,8 +26,8 @@ fi
   done
 ) &
 
-echo "Launching PostPilot — keep this window open while you work."
-echo "Close this window to stop PostPilot."
+echo "Launching GroupBlast — keep this window open while you work."
+echo "Close this window to stop GroupBlast."
 echo ""
 
 npm run dev
