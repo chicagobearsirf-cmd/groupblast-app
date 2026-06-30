@@ -9,8 +9,80 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TeamRouteImport } from './routes/team'
+import { Route as SignupRouteImport } from './routes/signup'
+import { Route as SetupRouteImport } from './routes/setup'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as QueueRouteImport } from './routes/queue'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as ImportRouteImport } from './routes/import'
+import { Route as HistoryRouteImport } from './routes/history'
+import { Route as GroupsRouteImport } from './routes/groups'
+import { Route as ExtensionRouteImport } from './routes/extension'
+import { Route as ComposeRouteImport } from './routes/compose'
+import { Route as CloudSetupRouteImport } from './routes/cloud-setup'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TeamRoute = TeamRouteImport.update({
+  id: '/team',
+  path: '/team',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SetupRoute = SetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QueueRoute = QueueRouteImport.update({
+  id: '/queue',
+  path: '/queue',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImportRoute = ImportRouteImport.update({
+  id: '/import',
+  path: '/import',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GroupsRoute = GroupsRouteImport.update({
+  id: '/groups',
+  path: '/groups',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExtensionRoute = ExtensionRouteImport.update({
+  id: '/extension',
+  path: '/extension',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComposeRoute = ComposeRouteImport.update({
+  id: '/compose',
+  path: '/compose',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CloudSetupRoute = CloudSetupRouteImport.update({
+  id: '/cloud-setup',
+  path: '/cloud-setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +91,200 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/cloud-setup': typeof CloudSetupRoute
+  '/compose': typeof ComposeRoute
+  '/extension': typeof ExtensionRoute
+  '/groups': typeof GroupsRoute
+  '/history': typeof HistoryRoute
+  '/import': typeof ImportRoute
+  '/login': typeof LoginRoute
+  '/queue': typeof QueueRoute
+  '/settings': typeof SettingsRoute
+  '/setup': typeof SetupRoute
+  '/signup': typeof SignupRoute
+  '/team': typeof TeamRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/cloud-setup': typeof CloudSetupRoute
+  '/compose': typeof ComposeRoute
+  '/extension': typeof ExtensionRoute
+  '/groups': typeof GroupsRoute
+  '/history': typeof HistoryRoute
+  '/import': typeof ImportRoute
+  '/login': typeof LoginRoute
+  '/queue': typeof QueueRoute
+  '/settings': typeof SettingsRoute
+  '/setup': typeof SetupRoute
+  '/signup': typeof SignupRoute
+  '/team': typeof TeamRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/cloud-setup': typeof CloudSetupRoute
+  '/compose': typeof ComposeRoute
+  '/extension': typeof ExtensionRoute
+  '/groups': typeof GroupsRoute
+  '/history': typeof HistoryRoute
+  '/import': typeof ImportRoute
+  '/login': typeof LoginRoute
+  '/queue': typeof QueueRoute
+  '/settings': typeof SettingsRoute
+  '/setup': typeof SetupRoute
+  '/signup': typeof SignupRoute
+  '/team': typeof TeamRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/cloud-setup'
+    | '/compose'
+    | '/extension'
+    | '/groups'
+    | '/history'
+    | '/import'
+    | '/login'
+    | '/queue'
+    | '/settings'
+    | '/setup'
+    | '/signup'
+    | '/team'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/cloud-setup'
+    | '/compose'
+    | '/extension'
+    | '/groups'
+    | '/history'
+    | '/import'
+    | '/login'
+    | '/queue'
+    | '/settings'
+    | '/setup'
+    | '/signup'
+    | '/team'
+  id:
+    | '__root__'
+    | '/'
+    | '/cloud-setup'
+    | '/compose'
+    | '/extension'
+    | '/groups'
+    | '/history'
+    | '/import'
+    | '/login'
+    | '/queue'
+    | '/settings'
+    | '/setup'
+    | '/signup'
+    | '/team'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CloudSetupRoute: typeof CloudSetupRoute
+  ComposeRoute: typeof ComposeRoute
+  ExtensionRoute: typeof ExtensionRoute
+  GroupsRoute: typeof GroupsRoute
+  HistoryRoute: typeof HistoryRoute
+  ImportRoute: typeof ImportRoute
+  LoginRoute: typeof LoginRoute
+  QueueRoute: typeof QueueRoute
+  SettingsRoute: typeof SettingsRoute
+  SetupRoute: typeof SetupRoute
+  SignupRoute: typeof SignupRoute
+  TeamRoute: typeof TeamRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/team': {
+      id: '/team'
+      path: '/team'
+      fullPath: '/team'
+      preLoaderRoute: typeof TeamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/setup': {
+      id: '/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof SetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/queue': {
+      id: '/queue'
+      path: '/queue'
+      fullPath: '/queue'
+      preLoaderRoute: typeof QueueRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/import': {
+      id: '/import'
+      path: '/import'
+      fullPath: '/import'
+      preLoaderRoute: typeof ImportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/groups': {
+      id: '/groups'
+      path: '/groups'
+      fullPath: '/groups'
+      preLoaderRoute: typeof GroupsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/extension': {
+      id: '/extension'
+      path: '/extension'
+      fullPath: '/extension'
+      preLoaderRoute: typeof ExtensionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/compose': {
+      id: '/compose'
+      path: '/compose'
+      fullPath: '/compose'
+      preLoaderRoute: typeof ComposeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cloud-setup': {
+      id: '/cloud-setup'
+      path: '/cloud-setup'
+      fullPath: '/cloud-setup'
+      preLoaderRoute: typeof CloudSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,6 +297,18 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CloudSetupRoute: CloudSetupRoute,
+  ComposeRoute: ComposeRoute,
+  ExtensionRoute: ExtensionRoute,
+  GroupsRoute: GroupsRoute,
+  HistoryRoute: HistoryRoute,
+  ImportRoute: ImportRoute,
+  LoginRoute: LoginRoute,
+  QueueRoute: QueueRoute,
+  SettingsRoute: SettingsRoute,
+  SetupRoute: SetupRoute,
+  SignupRoute: SignupRoute,
+  TeamRoute: TeamRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

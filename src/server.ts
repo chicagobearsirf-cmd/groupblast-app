@@ -39,6 +39,22 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    // The Facebook automation API only exists in the local Express server started
+    // by `npm run dev` (proxied at /api on http://localhost:8080). When the app is
+    // built/deployed/previewed there is no such proxy, so /api requests land here.
+    // Return a clear JSON error instead of letting them fall through to a confusing
+    // SPA/HTML 404 (the cause of "POST /api/facebook/check-session → 404").
+    const { pathname } = new URL(request.url);
+    if (pathname.startsWith("/api/")) {
+      return new Response(
+        JSON.stringify({
+          error: `The local API is not reachable from this build (${request.method} ${pathname}). The Facebook automation API only runs locally via \`npm run dev\`.`,
+          suggestion:
+            "Open the app at http://localhost:8080 (started with `npm run dev`), not a hosted/preview/built URL. The local Express API serves /api on http://localhost:3001 and the dev server proxies it.",
+        }),
+        { status: 503, headers: { "content-type": "application/json; charset=utf-8" } },
+      );
+    }
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

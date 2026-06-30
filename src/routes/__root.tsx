@@ -6,11 +6,16 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  useLocation,
+  useNavigate,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { brand } from "@/lib/brand";
+
+const PAGE_DESCRIPTION = `${brand.tagline} — posting dashboard.`;
 
 function NotFoundComponent() {
   return (
@@ -77,14 +82,35 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: brand.name },
+      { name: "description", content: PAGE_DESCRIPTION },
+      { name: "author", content: brand.name },
+      { property: "og:title", content: brand.name },
+      {
+        property: "og:description",
+        content: PAGE_DESCRIPTION,
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: brand.name },
+      {
+        property: "og:description",
+        content: PAGE_DESCRIPTION,
+      },
+      {
+        name: "twitter:description",
+        content: PAGE_DESCRIPTION,
+      },
+      {
+        property: "og:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/40c552ea-e611-4053-b298-52244cc306aa/id-preview-865c1816--0ced3989-56fd-4567-b3a8-80573310ecb9.lovable.app-1781272195239.png",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/40c552ea-e611-4053-b298-52244cc306aa/id-preview-865c1816--0ced3989-56fd-4567-b3a8-80573310ecb9.lovable.app-1781272195239.png",
+      },
     ],
     links: [
       {
@@ -113,13 +139,43 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+import { AppLayout } from "@/components/layout/AppLayout";
+import { AuthProvider, useAuth } from "@/components/auth/auth-context";
+
+function AuthGate({ children }: { children: ReactNode }) {
+  const { status, mode } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isAuthPage = location.pathname === "/login" || location.pathname === "/signup";
+
+  useEffect(() => {
+    if (mode !== "local" && status === "unauthenticated" && !isAuthPage) {
+      void navigate({ to: "/login" });
+    }
+  }, [mode, status, isAuthPage, navigate]);
+
+  if (mode === "local") return <>{children}</>;
+  if (status === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">Checking session…</p>
+      </div>
+    );
+  }
+  if (status === "unauthenticated" && !isAuthPage) return null;
+  return <>{children}</>;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <AuthProvider>
+        <AuthGate>
+          <AppLayout />
+        </AuthGate>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
