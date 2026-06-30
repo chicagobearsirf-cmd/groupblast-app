@@ -5,10 +5,6 @@ import {
   PenTool,
   ListOrdered,
   History,
-  Puzzle,
-  Rocket,
-  Building2,
-  Cloud,
   Settings,
 } from "lucide-react";
 import { Link, type LinkOptions } from "@tanstack/react-router";
@@ -29,16 +25,12 @@ import { useSettings } from "@/hooks/use-api";
 import { BrandMark } from "@/components/layout/BrandMark";
 
 const items = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard, tour: "nav-dashboard" },
-  { title: "Groups", url: "/groups", icon: Users, tour: "nav-groups" },
-  { title: "Import", url: "/import", icon: FileUp, tour: "nav-import" },
-  { title: "Composer", url: "/compose", icon: PenTool, tour: "nav-composer" },
-  { title: "Queue", url: "/queue", icon: ListOrdered, tour: "nav-queue" },
+  { title: "Home", url: "/", icon: LayoutDashboard, tour: "nav-dashboard" },
+  { title: "My Groups", url: "/groups", icon: Users, tour: "nav-groups" },
+  { title: "Add Groups", url: "/import", icon: FileUp, tour: "nav-import" },
+  { title: "New Post", url: "/compose", icon: PenTool, tour: "nav-composer" },
+  { title: "Scheduled", url: "/queue", icon: ListOrdered, tour: "nav-queue" },
   { title: "History", url: "/history", icon: History, tour: "nav-history" },
-  { title: "Extension", url: "/extension", icon: Puzzle, tour: "nav-extension" },
-  { title: "Rep Setup", url: "/setup", icon: Rocket, tour: "nav-setup" },
-  { title: "Team", url: "/team", icon: Building2, tour: "nav-team" },
-  { title: "Cloud Setup", url: "/cloud-setup", icon: Cloud, tour: "nav-cloud-setup" },
   { title: "Settings", url: "/settings", icon: Settings, tour: "nav-settings" },
 ] as const;
 
