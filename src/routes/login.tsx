@@ -34,7 +34,9 @@ function LoginPage() {
       await signInWithMagicLink(email);
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send login link.");
+      const msg = err instanceof Error ? err.message : "";
+      const isVague = !msg || msg === "{}" || msg.startsWith("{");
+      setError(isVague ? "Could not send login email. Please try again or contact support." : msg);
     } finally {
       setBusy(false);
     }
