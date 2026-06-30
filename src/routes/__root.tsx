@@ -162,7 +162,10 @@ function AuthGate({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (status === "unauthenticated" && !isAuthPage) return null;
+  // Signed out: show only the auth page full-screen (no app sidebar/chrome).
+  if (status === "unauthenticated") {
+    return isAuthPage ? <Outlet /> : null;
+  }
   return <>{children}</>;
 }
 

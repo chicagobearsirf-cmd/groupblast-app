@@ -445,7 +445,15 @@ function listRegisteredRoutes(): { methods: string[]; path: string }[] {
     router?: { stack?: unknown[] };
     _router?: { stack?: unknown[] };
   };
-  const stack = appWithRouter.router?.stack ?? appWithRouter._router?.stack ?? [];
+  // On Express 4 the `router` property is a getter that throws a deprecation
+  // error, so read it defensively — this is diagnostic logging and must never
+  // crash server startup regardless of the installed Express version.
+  let stack: unknown[] = [];
+  try {
+    stack = appWithRouter.router?.stack ?? appWithRouter._router?.stack ?? [];
+  } catch {
+    stack = appWithRouter._router?.stack ?? [];
+  }
   const routes: { methods: string[]; path: string }[] = [];
   for (const entry of stack) {
     const layer = entry as {
