@@ -429,7 +429,7 @@ app.use(
   },
 );
 
-app.listen(port, () => {
+app.listen(port, "127.0.0.1", () => {
   console.log(`Local Facebook automation API running at http://localhost:${port}`);
   const routes = listRegisteredRoutes();
   console.log(`[api] ${routes.length} routes registered. Facebook routes:`);
