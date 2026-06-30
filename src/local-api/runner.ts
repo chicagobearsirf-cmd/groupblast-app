@@ -2,7 +2,7 @@ import { chromium, type BrowserContext, type Locator, type Page } from "playwrig
 import { cp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { delay, storage, timestamp } from "./db";
+import { assertFacebookGroupUrl, delay, storage, timestamp } from "./db";
 import {
   facebookSelectors,
   judgeComposerEditor,
@@ -22,7 +22,10 @@ import type {
 } from "./types";
 import { categorizeGroupName } from "./group-categorizer";
 
-const debugDir = resolve(process.cwd(), "data", "debug");
+const dataDir = process.env.GROUPBLAST_DATA_DIR
+  ? resolve(process.env.GROUPBLAST_DATA_DIR)
+  : resolve(process.cwd(), "data");
+const debugDir = resolve(dataDir, "debug");
 const chromeProfileDebugPath = join(debugDir, "chrome-profile-debug-latest.json");
 
 // Build a filesystem-safe slug from a failure reason. Playwright timeout errors
@@ -64,8 +67,7 @@ const defaultChromeExecutablePaths = (
 // App-owned launch target for Imported Chrome Profile Snapshot mode. The app only
 // ever launches Playwright against this copy — never against a live Chrome profile.
 const snapshotUserDataDir = resolve(
-  process.cwd(),
-  "data",
+  dataDir,
   "browser-profiles",
   "imported-facebook-profile",
 );
@@ -291,6 +293,7 @@ class HumanReviewRunner {
     if (!session) throw new Error("No session found.");
     const group = storage.getGroup(session.selectedGroupIds[session.currentIndex]);
     if (!group) throw new Error("No current group.");
+    assertFacebookGroupUrl(group.url);
     await this.ensurePage();
     await this.page?.goto(group.url, { waitUntil: "domcontentloaded", timeout: 60000 });
   }
@@ -470,7 +473,7 @@ class HumanReviewRunner {
       this.page = null;
       this.browserLaunchKey = "";
     }
-    const profileDirectory = diagnostics.chromeProfileDirectoryUsed;
+    const profileDirectory = basename(diagnostics.chromeProfileDirectoryUsed);
     const sourceProfile = diagnostics.resolvedProfilePath;
     const targetProfile = join(snapshotUserDataDir, profileDirectory);
     await rm(snapshotUserDataDir, { recursive: true, force: true });
@@ -734,6 +737,7 @@ class HumanReviewRunner {
   private async prepareGroup(session: PostSession, group: FacebookGroup) {
     this.groupStartedAt = Date.now();
     try {
+      assertFacebookGroupUrl(group.url);
       await this.ensurePage();
       await this.page!.goto(group.url, { waitUntil: "domcontentloaded", timeout: 60000 });
       await delay(1500);
@@ -1001,7 +1005,11 @@ class HumanReviewRunner {
     action: ChromeProfileDiagnostics["action"],
   ): Promise<ChromeProfileDiagnostics> {
     const settings = storage.getSettings();
-    const profileDirectory = settings.chromeProfileDirectory.trim() || "Default";
+    const rawProfile = settings.chromeProfileDirectory.trim() || "Default";
+    const profileDirectory = basename(rawProfile);
+    if (profileDirectory !== rawProfile) {
+      throw new Error("Chrome profile directory must be a simple name, not a path");
+    }
     const resolvedProfilePath = join(settings.chromeUserDataDir, profileDirectory);
     const [
       executableExists,

@@ -192,8 +192,9 @@ const normalizeRows = (
         rowIndex,
         field: "url",
         value: result.url,
-        message: "URL does not contain facebook.com/groups/ — verify this is a Facebook group URL",
+        message: "URL does not contain facebook.com/groups/ — row skipped",
       });
+      return;
     }
     if (row.status && !result.status) {
       diagnostics.push({

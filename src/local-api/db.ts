@@ -193,6 +193,8 @@ const sanitizeJoinedGroupsSyncUrl = (url: string) => {
   return defaultSettings.joinedGroupsSyncUrl;
 };
 
+const FB_GROUP_URL_RE = /^https?:\/\/(www\.)?facebook\.com\/groups\//i;
+
 const normalizeUrl = (url: string) => {
   const trimmed = url.trim();
   try {
@@ -202,6 +204,12 @@ const normalizeUrl = (url: string) => {
     return parsed.toString().replace(/\/$/, "");
   } catch {
     return trimmed.replace(/\/$/, "");
+  }
+};
+
+const assertFacebookGroupUrl = (url: string) => {
+  if (!FB_GROUP_URL_RE.test(url)) {
+    throw new Error(`Rejected non-Facebook-group URL: ${url.slice(0, 80)}`);
   }
 };
 
@@ -292,6 +300,7 @@ export const storage = {
     return row ? rowToGroup(row) : null;
   },
   upsertGroup(input: Partial<FacebookGroup> & { name: string; url: string }) {
+    assertFacebookGroupUrl(input.url);
     const timestamp = now();
     const existingRow = db
       .prepare("select * from groups where url = ?")
@@ -531,3 +540,4 @@ export const storage = {
 export const delay = (ms: number) => new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
 export const randomId = id;
 export const timestamp = now;
+export { assertFacebookGroupUrl };
