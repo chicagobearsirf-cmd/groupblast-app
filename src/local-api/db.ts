@@ -12,7 +12,12 @@ import type {
   SessionResult,
 } from "./types";
 
-const dataDir = resolve(process.cwd(), "data");
+// When packaged as a desktop app the install dir is read-only, so the Electron
+// shell points GROUPBLAST_DATA_DIR at a writable per-user location. Falls back
+// to ./data for normal local dev.
+const dataDir = process.env.GROUPBLAST_DATA_DIR
+  ? resolve(process.env.GROUPBLAST_DATA_DIR)
+  : resolve(process.cwd(), "data");
 mkdirSync(dataDir, { recursive: true });
 
 const db = new Database(join(dataDir, "command-center.sqlite"));
@@ -69,7 +74,9 @@ const defaultSettings: AppSettings = {
   joinedGroupsSyncDefaultCategory: "Uncategorized",
   joinedGroupsSyncUrl: "https://www.facebook.com/groups/joins/",
   browserMode: "managed_playwright_profile",
-  browserProfilePath: resolve(process.cwd(), "playwright-profile"),
+  browserProfilePath: process.env.GROUPBLAST_DATA_DIR
+    ? resolve(process.env.GROUPBLAST_DATA_DIR, "playwright-profile")
+    : resolve(process.cwd(), "playwright-profile"),
   chromeExecutablePath: defaultChromeExecutablePath,
   chromeUserDataDir: defaultChromeUserDataDir,
   chromeProfileDirectory: "Default",

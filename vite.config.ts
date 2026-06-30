@@ -8,6 +8,9 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
   vite: {
+    // Packaged desktop builds run from a read-only install dir, so the Electron
+    // shell redirects Vite's dep-optimization cache to a writable per-user path.
+    cacheDir: process.env.VITE_CACHE_DIR || undefined,
     server: {
       proxy: {
         "/api": "http://localhost:3001",

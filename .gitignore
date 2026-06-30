@@ -37,3 +37,7 @@ data/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Electron build output
+dist-electron/
+build/icon-square.png
