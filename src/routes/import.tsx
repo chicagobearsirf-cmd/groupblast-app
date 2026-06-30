@@ -237,10 +237,10 @@ function ImportPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Import Groups</h1>
+        <h1 className="text-2xl font-bold">Add Groups</h1>
         <p className="text-sm text-muted-foreground">
-          Bring in groups from the capture extension or any CSV/JSON export. URL is the unique key —
-          duplicate URLs update the existing group.
+          Add the Facebook groups you want to post to. The easiest way is to let GroupBlast pull in
+          the groups you're already a member of.
         </p>
       </div>
 
@@ -248,11 +248,10 @@ function ImportPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Import from Facebook Group Capture Extension</CardTitle>
+          <CardTitle className="text-base">Paste or upload group links</CardTitle>
           <CardDescription>
-            Upload a JSON/CSV export from the extension or paste copied JSON. The importer
-            auto-detects the extension format and preserves category, subcategory, status, source,
-            and captured timestamps.
+            Already have a list? Paste your Facebook group links, or upload a spreadsheet (CSV) or
+            file. Nothing is saved until you preview and confirm.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -274,8 +273,8 @@ function ImportPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="extension">Facebook Group Capture Extension</SelectItem>
-                    <SelectItem value="generic">Generic CSV/JSON</SelectItem>
+                    <SelectItem value="extension">Paste links or file</SelectItem>
+                    <SelectItem value="generic">Spreadsheet (CSV/JSON)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -304,10 +303,7 @@ function ImportPage() {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Extension fields supported: name, url, category, subcategory, tags, status, notes,
-                source, capturedAt, updatedAt, plus older group_name/group_url/niche query exports.
-                Generic CSV supports groupName, groupUrl, category, tags, notes with flexible
-                name/url headers.
+                Tip: one Facebook group link per line is all you need.
               </p>
             </div>
             <Textarea
@@ -352,8 +348,7 @@ function ImportPage() {
           {result && result.imported > 0 ? (
             <Alert>
               <AlertDescription>
-                Imported {result.imported}. Created {result.created}. Updated {result.updated}.
-                Duplicates {result.duplicateCount}.
+                Added {result.imported} groups ({result.created} new, {result.updated} updated).
               </AlertDescription>
             </Alert>
           ) : null}
@@ -362,11 +357,11 @@ function ImportPage() {
 
       <Card id="joined-groups-sync">
         <CardHeader>
-          <CardTitle className="text-base">Sync Joined Facebook Groups</CardTitle>
+          <CardTitle className="text-base">Get my groups automatically (easiest)</CardTitle>
           <CardDescription>
-            Uses the visible Playwright Facebook session to scroll your joined-groups page and read
-            group names and URLs you can already access. Nothing is saved until you confirm the
-            preview.
+            GroupBlast opens your Facebook, finds the groups you're already in, and lists them for
+            you. Make sure you're connected on the Home page first. Nothing is saved until you
+            review and confirm.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -393,42 +388,37 @@ function ImportPage() {
                   title="Groups found"
                   value={syncStatus.groupsFound}
                   icon={Files}
-                  description={`Pass ${syncStatus.currentPass}`}
+                  description="So far"
                 />
                 <StatsCard
                   title="New groups"
                   value={syncStatus.newCount}
                   icon={FilePlus2}
-                  description="Will be created"
+                  description="Will be added"
                 />
                 <StatsCard
-                  title="Updated groups"
+                  title="Already saved"
                   value={syncStatus.updatedCount}
                   icon={RefreshCw}
-                  description="Existing URLs"
+                  description="You already have"
                 />
                 <StatsCard
                   title="Duplicates"
                   value={syncStatus.duplicateCount}
                   icon={FileWarning}
-                  description={`No-new passes ${syncStatus.noNewPasses}`}
+                  description="Skipped"
                 />
               </div>
               <div className="grid gap-1.5">
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Status: {syncStatus.state}</span>
-                  <span>
-                    {syncStatus.groupsFound} / {syncStatus.maxGroups || "settings max"}
-                  </span>
+                  <span>{syncStatus.groupsFound} found</span>
                 </div>
                 <Progress value={syncProgress} />
               </div>
               {syncStatus.lastError ? (
                 <Alert>
-                  <AlertDescription>
-                    {syncStatus.lastError}
-                    {syncStatus.debugPath ? ` Debug record: ${syncStatus.debugPath}` : ""}
-                  </AlertDescription>
+                  <AlertDescription>{syncStatus.lastError}</AlertDescription>
                 </Alert>
               ) : null}
             </div>
@@ -438,8 +428,8 @@ function ImportPage() {
           {syncResult ? (
             <Alert>
               <AlertDescription>
-                Imported {syncResult.imported}. Created {syncResult.created}. Updated duplicates{" "}
-                {syncResult.updated}. Duplicate count {syncResult.duplicateCount}.
+                Added {syncResult.imported} groups ({syncResult.created} new, {syncResult.updated}{" "}
+                updated).
               </AlertDescription>
             </Alert>
           ) : null}
