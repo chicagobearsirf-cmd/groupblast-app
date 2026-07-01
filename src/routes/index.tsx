@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { FileUp, Globe, LogIn, PenTool, Users, ListChecks, CheckCircle2 } from "lucide-react";
+import { Globe, LogIn, Users, ListChecks, CheckCircle2 } from "lucide-react";
 import { toast } from "@/lib/notify";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { StatusBadge } from "@/components/groups/GroupStatusBadge";
@@ -109,22 +109,6 @@ function DashboardPage() {
           </p>
         </CardContent>
       </Card>
-
-      {/* Step 2: do the work */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Button asChild variant="outline" className="h-20 flex-col gap-2">
-          <Link to="/import">
-            <FileUp className="h-5 w-5" />
-            Add Groups
-          </Link>
-        </Button>
-        <Button asChild variant="outline" className="h-20 flex-col gap-2">
-          <Link to="/compose">
-            <PenTool className="h-5 w-5" />
-            New Post
-          </Link>
-        </Button>
-      </div>
 
       {actionError ? <ApiErrorAlert error={actionError} title="Facebook action failed" /> : null}
 

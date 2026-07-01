@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { brand } from "@/lib/brand";
@@ -10,6 +10,7 @@ export const Route = createFileRoute("/auth-callback")({
 
 function AuthCallbackPage() {
   const [status, setStatus] = useState<"processing" | "done" | "error">("processing");
+  const navigate = useNavigate();
 
 useEffect(() => {
   const attemptRelay = async () => {
@@ -40,8 +41,12 @@ useEffect(() => {
           refresh_token: session.refresh_token 
         }),
       });
-      if (res.ok) setStatus("done");
-      else setStatus("error");
+      if (res.ok) {
+        setStatus("done");
+        // If the Electron window itself navigated here, redirect home after a
+        // short pause so the user sees the success message before landing on dashboard.
+        setTimeout(() => void navigate({ to: "/" }), 1500);
+      } else setStatus("error");
     } catch {
       setStatus("error");
     }

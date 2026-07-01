@@ -260,115 +260,6 @@ function ImportPage() {
 
       <LocalDataNotice />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Paste or upload group links</CardTitle>
-          <CardDescription>
-            Already have a list? Paste your Facebook group links, or upload a spreadsheet (CSV) or
-            file. Nothing is saved until you preview and confirm.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
-            <div className="flex flex-col gap-3">
-              <div className="grid gap-1.5">
-                <Label>Import source</Label>
-                <Select
-                  value={importMode}
-                  onValueChange={(mode) => {
-                    setImportMode(mode as "extension" | "generic");
-                    setPreview(null);
-                    setResult(null);
-                    setImportError(null);
-                    setActionError(null);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="extension">Paste links or file</SelectItem>
-                    <SelectItem value="generic">Spreadsheet (CSV/JSON)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {importMode === "generic" ? (
-                <div className="grid gap-1.5">
-                  <Label>Format</Label>
-                  <Select value={format} onValueChange={(next) => setFormat(next as ImportFormat)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">Auto-detect</SelectItem>
-                      <SelectItem value="csv">CSV</SelectItem>
-                      <SelectItem value="json">JSON array</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
-              <div className="grid gap-1.5">
-                <Label htmlFor="import-file">Upload export file</Label>
-                <Input
-                  id="import-file"
-                  type="file"
-                  accept=".json,.csv,.txt,application/json,text/csv,text/plain"
-                  onChange={(event) => void loadFile(event.target.files?.[0])}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Tip: one Facebook group link per line is all you need.
-              </p>
-            </div>
-            <Textarea
-              className="min-h-[220px] font-mono text-xs"
-              value={content}
-              onChange={(event) => {
-                setContent(event.target.value);
-                setPreview(null);
-                setResult(null);
-                setImportError(null);
-                setActionError(null);
-              }}
-              placeholder={
-                importMode === "extension"
-                  ? "Paste JSON from Copy JSON, or CSV from Export CSV.\nCSV: name,url,category,subcategory,tags,status,notes,source,capturedAt,updatedAt"
-                  : "groupName,groupUrl,category,tags,notes"
-              }
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              disabled={!content.trim() || busy}
-              onClick={() => void previewImport()}
-            >
-              Preview import
-            </Button>
-            <Button disabled={!content.trim() || busy} onClick={() => void importGroups()}>
-              Import groups
-            </Button>
-            <Button variant="ghost" size="sm" onClick={loadSampleCsv}>
-              Load sample CSV
-            </Button>
-          </div>
-          {actionError ? <ApiErrorAlert error={actionError} title="Import request failed" /> : null}
-          {importError ? (
-            <Alert variant="destructive">
-              <AlertDescription>{importError}</AlertDescription>
-            </Alert>
-          ) : null}
-          {preview ? <ImportPreviewTable preview={preview} /> : null}
-          {result && result.imported > 0 ? (
-            <Alert>
-              <AlertDescription>
-                Added {result.imported} groups ({result.created} new, {result.updated} updated).
-              </AlertDescription>
-            </Alert>
-          ) : null}
-        </CardContent>
-      </Card>
-
       <Card id="joined-groups-sync">
         <CardHeader>
           <CardTitle className="text-base">Get my groups automatically (easiest)</CardTitle>
@@ -441,6 +332,112 @@ function ImportPage() {
               <AlertDescription>
                 Added {syncResult.imported} groups ({syncResult.created} new, {syncResult.updated}{" "}
                 updated).
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Paste or upload group links</CardTitle>
+          <CardDescription>
+            Already have a list? Paste your Facebook group links, or upload a spreadsheet (CSV) or
+            file. Nothing is saved until you preview and confirm.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
+            <div className="flex flex-col gap-3">
+              <div className="grid gap-1.5">
+                <Label>Import source</Label>
+                <Select
+                  value={importMode}
+                  onValueChange={(mode) => {
+                    setImportMode(mode as "extension" | "generic");
+                    setPreview(null);
+                    setResult(null);
+                    setImportError(null);
+                    setActionError(null);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="extension">Paste links or file</SelectItem>
+                    <SelectItem value="generic">Spreadsheet (CSV/JSON)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {importMode === "generic" ? (
+                <div className="grid gap-1.5">
+                  <Label>Format</Label>
+                  <Select value={format} onValueChange={(next) => setFormat(next as ImportFormat)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto-detect</SelectItem>
+                      <SelectItem value="csv">CSV</SelectItem>
+                      <SelectItem value="json">JSON array</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              <div className="grid gap-1.5">
+                <Label htmlFor="import-file">Upload export file</Label>
+                <Input
+                  id="import-file"
+                  type="file"
+                  accept=".json,.csv,.txt,application/json,text/csv,text/plain"
+                  onChange={(event) => void loadFile(event.target.files?.[0])}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Tip: one Facebook group link per line is all you need.
+              </p>
+            </div>
+            <Textarea
+              className="min-h-[220px] font-mono text-xs"
+              value={content}
+              onChange={(event) => {
+                setContent(event.target.value);
+                setPreview(null);
+                setResult(null);
+                setImportError(null);
+                setActionError(null);
+              }}
+              placeholder={
+                importMode === "extension"
+                  ? "Paste your Facebook group links here, one per line.\nhttps://facebook.com/groups/example"
+                  : "groupName,groupUrl,category,tags,notes"
+              }
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={!content.trim() || busy}
+              onClick={() => void previewImport()}
+            >
+              Preview
+            </Button>
+            <Button disabled={!content.trim() || busy} onClick={() => void importGroups()}>
+              Add groups
+            </Button>
+          </div>
+          {actionError ? <ApiErrorAlert error={actionError} title="Import request failed" /> : null}
+          {importError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{importError}</AlertDescription>
+            </Alert>
+          ) : null}
+          {preview ? <ImportPreviewTable preview={preview} /> : null}
+          {result && result.imported > 0 ? (
+            <Alert>
+              <AlertDescription>
+                Added {result.imported} groups ({result.created} new, {result.updated} updated).
               </AlertDescription>
             </Alert>
           ) : null}

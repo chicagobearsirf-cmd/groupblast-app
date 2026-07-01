@@ -27,10 +27,10 @@ import { BrandMark } from "@/components/layout/BrandMark";
 const items = [
   { title: "Home", url: "/", icon: LayoutDashboard, tour: "nav-dashboard" },
   { title: "My Groups", url: "/groups", icon: Users, tour: "nav-groups" },
-  { title: "Add Groups", url: "/import", icon: FileUp, tour: "nav-import" },
   { title: "New Post", url: "/compose", icon: PenTool, tour: "nav-composer" },
   { title: "Scheduled", url: "/queue", icon: ListOrdered, tour: "nav-queue" },
   { title: "History", url: "/history", icon: History, tour: "nav-history" },
+  { title: "Add Groups", url: "/import", icon: FileUp, tour: "nav-import" },
   { title: "Settings", url: "/settings", icon: Settings, tour: "nav-settings" },
 ] as const;
 

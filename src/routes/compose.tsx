@@ -6,76 +6,47 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { StatusBadge } from "@/components/groups/GroupStatusBadge";
-import {
-  GroupFilters,
-  filterGroups,
-  type GroupFilterState,
-} from "@/components/groups/GroupFilters";
+import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
-import {
-  queryKeys,
-  useCollections,
-  useGroupTaxonomy,
-  useGroups,
-  useInvalidate,
-  useSettings,
-} from "@/hooks/use-api";
+import { queryKeys, useGroups, useInvalidate, useSettings } from "@/hooks/use-api";
 
 export const Route = createFileRoute("/compose")({
   component: ComposerPage,
 });
 
-const ANY_COLLECTION = "__any__";
-
 function ComposerPage() {
   const navigate = useNavigate();
   const invalidate = useInvalidate();
   const { data: groups = [] } = useGroups();
-  const { data: collections = [] } = useCollections();
   const { data: settings } = useSettings();
-  const { categories, subcategories } = useGroupTaxonomy();
 
   const [postText, setPostText] = useState("");
-  const [filters, setFilters] = useState<GroupFilterState>({
-    search: "",
-    category: "",
-    subcategory: "",
-    status: "active",
-    source: "",
-  });
-  const [collectionId, setCollectionId] = useState("");
+  const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
 
-  const collection = collections.find((item) => item.id === collectionId);
-  const filtered = filterGroups(groups, filters).filter(
-    (group) => !collection || collection.groupIds.includes(group.id),
+  const filtered = groups.filter(
+    (g) =>
+      g.status === "active" &&
+      (!search || g.name.toLowerCase().includes(search.toLowerCase())),
   );
 
-  const lines = postText ? postText.split(/\r\n|\r|\n/).length : 0;
   const estimateSeconds = settings
     ? selected.length * ((settings.minDelaySeconds + settings.maxDelaySeconds) / 2 + 20)
     : 0;
 
-  const selectOneGroup = () => {
-    const nextGroupId = selected[0] ?? filtered[0]?.id;
-    setSelected(nextGroupId ? [nextGroupId] : []);
-  };
+  const toggleGroup = (id: string, checked: boolean) =>
+    setSelected((prev) => (checked ? [...prev, id] : prev.filter((x) => x !== id)));
+
+  const selectAll = () => setSelected(filtered.map((g) => g.id));
+  const clearAll = () => setSelected([]);
 
   const createSession = async () => {
     setCreating(true);
     try {
-      const session = await api.createSession(postText, selected);
+      await api.createSession(postText, selected);
       await invalidate(queryKeys.sessionStatus, queryKeys.history);
-      toast.success(`Queue created: ${session.id}`);
+      toast.success("Queue created — head to Scheduled to start.");
       void navigate({ to: "/queue" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create queue.");
@@ -85,146 +56,41 @@ function ComposerPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
       <div>
         <h1 className="text-2xl font-bold">New Post</h1>
         <p className="text-sm text-muted-foreground">
-          Write your post, choose your groups, and send.
+          Write your post, pick your groups, and create the queue.
           {settings?.autoSubmitEnabled
             ? " The app will click Post for you."
-            : " The app fills in your post and waits for you to click Post."}
+            : " The app fills the post — you click Post."}
         </p>
       </div>
 
-      {/* min-w-0 on each card overrides the browser's default grid-item min-width
-          (min-content), which otherwise forces the row to be at least as wide as
-          its widest unwrapped content — making the page wider than the viewport
-          instead of letting columns shrink to fit. */}
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[1fr_1.2fr_1fr]">
-        <Card className="min-w-0">
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Post content */}
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">Your post</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <Textarea
-              className="min-h-[260px]"
+              className="min-h-[220px]"
               value={postText}
-              onChange={(event) => setPostText(event.target.value)}
-              placeholder="Paste the finished Facebook post here."
+              onChange={(e) => setPostText(e.target.value)}
+              placeholder="Paste or type your Facebook post here."
               data-tour="compose-textarea"
             />
-            <div className="flex gap-4 text-xs text-muted-foreground">
-              <span>{postText.length} characters</span>
-              <span>{lines} lines</span>
-              <span>{selected.length} selected groups</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="min-w-0">
-          <CardHeader>
-            <CardTitle className="text-base">Choose groups</CardTitle>
-          </CardHeader>
-          <CardContent className="flex min-w-0 flex-col gap-3">
-            <GroupFilters
-              value={filters}
-              onChange={setFilters}
-              categories={categories}
-              subcategories={subcategories}
-              statuses={["active", "paused", "needs_review", "failed"]}
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <Select
-                value={collectionId || ANY_COLLECTION}
-                onValueChange={(next) => setCollectionId(next === ANY_COLLECTION ? "" : next)}
-              >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Any saved list" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ANY_COLLECTION}>Any saved list</SelectItem>
-                  {collections.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setSelected(
-                    Array.from(new Set([...selected, ...filtered.map((group) => group.id)])),
-                  )
-                }
-              >
-                Select visible
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!filtered.length && !selected.length}
-                onClick={selectOneGroup}
-                data-tour="compose-test-one"
-              >
-                Test One Group
-              </Button>
-            </div>
-            <Alert>
-              <AlertDescription>Recommended first test: 1 group.</AlertDescription>
-            </Alert>
-            <div className="flex max-h-[320px] flex-col gap-1 overflow-y-auto">
-              {filtered.map((group) => (
-                <label
-                  key={group.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-md border p-2 hover:bg-accent"
-                >
-                  <Checkbox
-                    checked={selected.includes(group.id)}
-                    onCheckedChange={(checked) =>
-                      setSelected(
-                        checked
-                          ? [...selected, group.id]
-                          : selected.filter((id) => id !== group.id),
-                      )
-                    }
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{group.name}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {[group.category, group.subcategory].filter(Boolean).join(" / ")} ·{" "}
-                      {group.url}
-                    </span>
-                  </span>
-                  <StatusBadge status={group.status} />
-                </label>
-              ))}
-              {!filtered.length ? (
-                <p className="p-2 text-sm text-muted-foreground">No groups match the filters.</p>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="min-w-0">
-          <CardHeader>
-            <CardTitle className="text-base">Review &amp; send</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <div className="max-h-[160px] overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-sm">
-              {postText || "Post preview will appear here after you paste prepared copy."}
-            </div>
-            <dl className="grid grid-cols-2 gap-y-1 text-sm">
-              <dt className="text-muted-foreground">Groups selected</dt>
-              <dd className="font-medium">{selected.length}</dd>
-              <dt className="text-muted-foreground">Estimated time</dt>
-              <dd className="font-medium">{Math.ceil(estimateSeconds / 60)} min</dd>
-            </dl>
+            {selected.length > 0 && postText.trim() ? (
+              <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                {selected.length} group{selected.length === 1 ? "" : "s"} selected ·{" "}
+                ~{Math.ceil(estimateSeconds / 60)} min
+              </div>
+            ) : null}
             {selected.length > 5 ? (
               <Alert variant="destructive">
                 <AlertDescription>
-                  You picked more than 5 groups. Try one group first to make sure it works.
+                  More than 5 groups selected — run a one-group test first.
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -234,8 +100,57 @@ function ComposerPage() {
               onClick={() => void createSession()}
               data-tour="compose-create-queue"
             >
-              {creating ? "Creating…" : "Create post queue"}
+              {creating ? "Creating…" : `Create queue${selected.length ? ` (${selected.length})` : ""}`}
             </Button>
+          </CardContent>
+        </Card>
+
+        {/* Group picker */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Choose groups</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Search groups…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1"
+              />
+              <Button variant="outline" size="sm" onClick={selectAll}>
+                All
+              </Button>
+              <Button variant="outline" size="sm" onClick={clearAll}>
+                Clear
+              </Button>
+            </div>
+            <div className="flex max-h-[380px] flex-col gap-1 overflow-y-auto">
+              {filtered.map((group) => (
+                <label
+                  key={group.id}
+                  className="flex cursor-pointer items-center gap-3 rounded-md border p-2.5 hover:bg-accent"
+                >
+                  <Checkbox
+                    checked={selected.includes(group.id)}
+                    onCheckedChange={(checked) => toggleGroup(group.id, Boolean(checked))}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {group.name}
+                  </span>
+                  {group.category && group.category !== "General" ? (
+                    <span className="shrink-0 text-xs text-muted-foreground">{group.category}</span>
+                  ) : null}
+                </label>
+              ))}
+              {!filtered.length ? (
+                <p className="p-2 text-sm text-muted-foreground">
+                  {groups.length === 0
+                    ? "No groups yet — go to Add Groups first."
+                    : "No groups match your search."}
+                </p>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
       </div>
