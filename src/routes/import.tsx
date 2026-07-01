@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "@/lib/notify";
 import { FilePlus2, Files, FileWarning, RefreshCw } from "lucide-react";
@@ -184,9 +184,10 @@ function ImportPage() {
     setSyncBusy(true);
     setSyncResult(null);
     setActionError(null);
+    autoImportDoneRef.current = false;
     try {
       setSyncStatus(await api.startJoinedGroupsSync());
-      toast.success("Joined groups sync started.");
+      toast.success("Finding your groups…");
     } catch (error) {
       setActionError(error);
       toast.error(error instanceof Error ? error.message : "Group sync failed to start.");
@@ -216,7 +217,9 @@ function ImportPage() {
       setSyncResult(response);
       setSyncStatus(await api.joinedGroupsSyncStatus());
       await invalidate(queryKeys.groups, queryKeys.collections);
-      toast.success(`Imported ${response.imported} synced groups.`);
+      toast.success(
+        `Added ${response.imported} groups. Delete any you don't want from My Groups.`,
+      );
     } catch (error) {
       setActionError(error);
       toast.error(error instanceof Error ? error.message : "Synced group import failed.");
@@ -229,6 +232,17 @@ function ImportPage() {
   const syncReady =
     (syncStatus?.state === "ready" || syncStatus?.state === "stopped") &&
     Boolean(syncStatus.rows.length);
+
+  // Import all found groups automatically once the sync finishes — the user
+  // deletes any they don't want from My Groups afterward, instead of gating
+  // every sync behind a manual Confirm click.
+  const autoImportDoneRef = useRef(false);
+  useEffect(() => {
+    if (syncReady && !autoImportDoneRef.current && !syncBusy && !syncResult) {
+      autoImportDoneRef.current = true;
+      void confirmGroupSyncImport();
+    }
+  }, [syncReady, syncBusy, syncResult]);
   const syncProgress =
     syncStatus && syncStatus.maxGroups > 0
       ? Math.min(100, Math.round((syncStatus.groupsFound / syncStatus.maxGroups) * 100))
@@ -359,15 +373,15 @@ function ImportPage() {
         <CardHeader>
           <CardTitle className="text-base">Get my groups automatically (easiest)</CardTitle>
           <CardDescription>
-            GroupBlast opens your Facebook, finds the groups you're already in, and lists them for
-            you. Make sure you're connected on the Home page first. Nothing is saved until you
-            review and confirm.
+            GroupBlast opens your Facebook, finds the groups you're already in, and adds them for
+            you automatically. Make sure you're connected on the Home page first. You can delete any
+            you don't want later from My Groups.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-wrap gap-2">
             <Button disabled={syncBusy || syncRunning} onClick={() => void startGroupSync()}>
-              Start Group Sync
+              {syncRunning ? "Finding your groups…" : "Find my groups"}
             </Button>
             <Button
               variant="outline"
@@ -375,9 +389,6 @@ function ImportPage() {
               onClick={() => void stopGroupSync()}
             >
               Stop
-            </Button>
-            <Button disabled={syncBusy || !syncReady} onClick={() => void confirmGroupSyncImport()}>
-              Confirm Import
             </Button>
           </div>
 
