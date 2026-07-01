@@ -12,6 +12,8 @@ type PlanStatusState = {
   daysRemaining: number;
   aiAccess: boolean;
   isLoading: boolean;
+  promoCode: string | null;
+  discountPercent: number;
 };
 
 const localAccess: PlanStatusState = {
@@ -22,6 +24,8 @@ const localAccess: PlanStatusState = {
   daysRemaining: 0,
   aiAccess: false,
   isLoading: false,
+  promoCode: null,
+  discountPercent: 0,
 };
 
 const loadingState: PlanStatusState = {
@@ -32,6 +36,8 @@ const loadingState: PlanStatusState = {
   daysRemaining: 0,
   aiAccess: false,
   isLoading: true,
+  promoCode: null,
+  discountPercent: 0,
 };
 
 type PlanStatusRpc = {
@@ -41,9 +47,15 @@ type PlanStatusRpc = {
   trial_ends_at?: string | null;
   days_remaining?: number;
   ai_access?: boolean;
+  promo_code?: string | null;
+  discount_percent?: number;
 };
 
-export function usePlanStatus(): PlanStatusState {
+type ApplyPromoCodeResult = { ok: boolean; discountPercent?: number; error?: string };
+
+export function usePlanStatus(): PlanStatusState & {
+  applyPromoCode: (code: string) => Promise<ApplyPromoCodeResult>;
+} {
   const { mode, status: authStatus, user } = useAuth();
   const [state, setState] = useState<PlanStatusState>(
     mode === "local" ? localAccess : loadingState,
@@ -70,6 +82,8 @@ export function usePlanStatus(): PlanStatusState {
         daysRemaining: 0,
         aiAccess: false,
         isLoading: false,
+        promoCode: null,
+        discountPercent: 0,
       });
       return;
     }
@@ -85,6 +99,8 @@ export function usePlanStatus(): PlanStatusState {
         daysRemaining: 0,
         aiAccess: false,
         isLoading: false,
+        promoCode: null,
+        discountPercent: 0,
       });
       return;
     }
@@ -106,6 +122,8 @@ export function usePlanStatus(): PlanStatusState {
       daysRemaining: Number(payload.days_remaining ?? 0),
       aiAccess: Boolean(payload.ai_access),
       isLoading: false,
+      promoCode: payload.promo_code ?? null,
+      discountPercent: Number(payload.discount_percent ?? 0),
     });
   }, [authStatus, mode, user?.id]);
 
@@ -120,5 +138,27 @@ export function usePlanStatus(): PlanStatusState {
     return () => window.removeEventListener("focus", onFocus);
   }, [mode, refresh]);
 
-  return state;
+  const applyPromoCode = useCallback(
+    async (code: string): Promise<{ ok: boolean; discountPercent?: number; error?: string }> => {
+      if (mode === "local" || !user?.id) return { ok: false, error: "not_authenticated" };
+      const client = getSupabaseClient();
+      if (!client) return { ok: false, error: "not_configured" };
+
+      const { data, error } = await client.rpc("apply_promo_code", {
+        p_user_id: user.id,
+        p_code: code,
+      });
+      if (error) return { ok: false, error: error.message };
+
+      const result = (data ?? {}) as { ok?: boolean; discount_percent?: number; error?: string };
+      if (result.ok) {
+        await refresh();
+        return { ok: true, discountPercent: Number(result.discount_percent ?? 0) };
+      }
+      return { ok: false, error: result.error ?? "invalid_code" };
+    },
+    [mode, user?.id, refresh],
+  );
+
+  return { ...state, applyPromoCode };
 }
