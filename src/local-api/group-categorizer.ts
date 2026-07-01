@@ -167,7 +167,35 @@ const rules: CategoryRule[] = [
       "neighborhood",
       "town ",
       "city of ",
+      "county",
+      "residents",
+      "locals",
     ],
+  },
+  {
+    category: "Family & Parenting",
+    subcategory: "",
+    keywords: ["mom", "moms", "mommy", "parent", "parenting", "family", "kids", "childcare"],
+  },
+  {
+    category: "Pets",
+    subcategory: "",
+    keywords: ["dog", "cat", "pet", "puppy", "rescue", "animal"],
+  },
+  {
+    category: "Faith & Church",
+    subcategory: "",
+    keywords: ["church", "faith", "christian", "ministry", "worship", "bible"],
+  },
+  {
+    category: "Hobbies & Interests",
+    subcategory: "",
+    keywords: ["hobby", "crafts", "gaming", "photography", "garden", "fishing", "hunting", "diy "],
+  },
+  {
+    category: "Sports & Recreation",
+    subcategory: "",
+    keywords: ["sports", "football", "baseball", "soccer", "golf", "hockey", "outdoors", "hiking"],
   },
 ];
 
@@ -180,5 +208,5 @@ export function categorizeGroupName(name: string): { category: string; subcatego
       }
     }
   }
-  return { category: "Uncategorized", subcategory: "" };
+  return { category: "General", subcategory: "" };
 }

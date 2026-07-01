@@ -65,9 +65,9 @@ useEffect(() => {
             </div>
             <h1 className="text-2xl font-bold">You're logged in!</h1>
             <p className="mt-2 text-sm text-slate-500">
-              Go back to the <strong>{brand.name}</strong> app — it will update automatically.
+              You can <strong>close this tab</strong> and switch back to the{" "}
+              <strong>{brand.name}</strong> app — it's already signing you in.
             </p>
-            <p className="mt-4 text-xs text-slate-400">You can close this tab.</p>
           </>
         ) : (
           <>

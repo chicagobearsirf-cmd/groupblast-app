@@ -135,6 +135,21 @@ function QueuePage() {
           </div>
 
           {/* Primary controls — the buttons users press most */}
+          {status.session.state !== "running" && status.remainingCount > 0 ? (
+            <div className="flex flex-col items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/40 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200">
+                Ready to post to {status.remainingCount} group
+                {status.remainingCount === 1 ? "" : "s"}. Click Start to begin.
+              </p>
+              <Button
+                className="h-11 bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={() => act("start", "Started.")}
+              >
+                <Play className="mr-2 h-4 w-4" /> Start posting
+              </Button>
+            </div>
+          ) : null}
+
           <div className="flex flex-wrap gap-2">
             <Button className="h-11" onClick={() => act("start", "Started.")}>
               <Play className="mr-2 h-4 w-4" /> Start
