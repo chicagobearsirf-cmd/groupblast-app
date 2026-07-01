@@ -1,50 +1,92 @@
-# GroupBlast Pre-Ship Audit — 2026-06-30 (Windows build, commit cb36e59)
+# GroupBlast Pre-Ship Audit — 2026-06-30 (commit cb36e59, updated through d707090)
 
-Verdict at time of writing: **NO-GO** until the three blockers below are fixed.
-Most findings are in shared code (`electron/main.cjs`, `src/local-api/server.ts`,
-`src/routes/auth-callback.tsx`, group/import logic) and apply to **both the
-Windows and Mac builds** unless noted otherwise.
+**Platform this audit was performed on: Windows 10 (build 19045).** All testing,
+builds, and verification below — including the re-verification status noted in
+each blocker — were done on a Windows machine only. No Mac testing has been
+done; Mac-specific behavior is inferred from shared code, not observed.
+
+Verdict at time of original writing: **NO-GO** until the three blockers below
+were fixed. **Status update:** all 3 blockers + the single-instance-lock issue
+were addressed in commit `eb12124` ("Fix 3 pre-ship blockers from audit") and
+the Chromium-bundling fix, then re-verified on a fresh Windows rebuild at
+commit `d707090` (pricing/trial commit, built on top of `3f1faf6`). See
+"Re-verification" note under each item, and "Build info" below for the fresh
+installer's hash. Most findings are in shared code (`electron/main.cjs`,
+`src/local-api/server.ts`, `src/routes/auth-callback.tsx`, group/import logic)
+and apply to **both the Windows and Mac builds** unless noted otherwise.
+
+**Important scope note on this pass:** this re-verification round was run by
+an AI agent with shell/file access only — no GUI, no email inbox, no Facebook
+account access. It confirms the rebuild pipeline, the packaged installer
+contents, and everything observable via CLI (health endpoint, port binding,
+process behavior). It does **not** re-confirm the live end-to-end flow (magic
+link email login → Facebook connect → group import → compose → post to a
+real group) on this exact rebuild — that flow was previously verified once
+on the older `cb36e59` build (see "Passed / verified clean" below) but needs
+a human to re-run it on this rebuild before shipping, since a lot has changed
+since (UI polish, Chromium bundling, single-instance lock, pricing/trial
+changes).
 
 ## Blockers (must fix before shipping either platform)
 
-- [ ] **Local API exposed to the LAN.** `electron/main.cjs` spawns Vite (port
+- [x] **Local API exposed to the LAN.** `electron/main.cjs` spawns Vite (port
       8080) without restricting it to loopback, and Vite's `/api` proxy
       forwards to the Express API. Verified: a LAN-facing address could reach
       `/api/health` through the Vite proxy even though the Express server
       itself correctly refuses non-loopback connections on port 3001.
-      Fix: spawn Vite with `--host 127.0.0.1` (or set `server.host` in
-      `vite.config.ts`) to match the Express server's binding.
-      **Platform: both.**
+      **Fixed in `eb12124`** (Vite now spawned with `--host 127.0.0.1`).
+      **Re-verified on Windows** at commit 3f1faf6: `netstat` confirms both
+      port 3001 and port 8080 now listen on `127.0.0.1` only, not `0.0.0.0`.
+      **Platform: both** (Mac not independently verified).
 
-- [ ] **First launch after install can fail.** Cold Vite dependency
+- [x] **First launch after install can fail.** Cold Vite dependency
       pre-bundling can exceed the hardcoded 90s `waitForServer` timeout in
       `electron/main.cjs`, producing a native "Could not start the app"
-      error dialog on a user's very first launch. Second launch (warm cache)
-      is fine. Fix: raise the first-run timeout and/or show a "first run can
-      take a few minutes" message instead of failing at 90s; consider
-      pre-warming the cache during build/install.
-      **Platform: both** (Mac likely has the same 90s timeout constant).
+      error dialog on a user's very first launch. **Fixed in `eb12124`**
+      (timeout raised 90s → 5min). Not yet independently re-timed against a
+      truly cold cache on this pass, but the code fix is confirmed present.
+      **Platform: both** (Mac likely has the same timeout constant; not
+      independently verified on Mac).
 
-- [ ] **Playwright's browser isn't part of the install.** The installer/app
+- [x] **Playwright's browser isn't part of the install.** The installer/app
       bundles the Playwright JS driver but not the Chromium binary it drives
       (lives outside `node_modules`, in the OS Playwright cache). Fresh
       machines hit `Executable doesn't exist` on "Connect Facebook" until
-      someone manually runs `npx playwright install chromium`. Fix: bundle
-      Chromium as an `extraResource` in electron-builder config, or run
-      `playwright install chromium` on first launch with a visible progress
-      indicator. **Platform: both** — Mac needs its own Chromium bundle
-      target too (Playwright downloads platform-specific browsers).
+      someone manually runs `npx playwright install chromium`. **Fixed**:
+      Chromium is now bundled as an `extraResource` (`pw-browsers/`) and the
+      API points at it via `PLAYWRIGHT_BROWSERS_PATH`. **Re-verified on
+      Windows**: built with `PLAYWRIGHT_BROWSERS_PATH=$PWD\pw-browsers npx
+      playwright install chromium` (690MB), packaged installer grew from
+      ~156MB to 365MB, confirmed `chrome.exe` present in the installed app's
+      `resources\pw-browsers\chromium-1228\chrome-win64\` — no manual
+      `playwright install` needed on this fresh machine.
+      **Platform: both** — Mac needs its OWN Chromium bundle built the same
+      way (Playwright downloads platform-specific browsers; the Windows
+      `pw-browsers` folder will not work on Mac). Not verified on Mac.
 
 ## High priority
 
-- [ ] **No single-instance lock.** `electron/main.cjs` never calls
+- [x] **No single-instance lock.** `electron/main.cjs` never calls
       `app.requestSingleInstanceLock()`. Launching a second instance while
       one is running fails that instance's own Vite server
       (`Port 8080 is already in use`), and both windows end up silently
       sharing whichever instance's servers actually bound. Closing the
       "wrong" window kills the backend for the other one, with no clear
-      error. Fix: add `requestSingleInstanceLock()`, focus the existing
-      window on relaunch. **Platform: both.**
+      error. **Fixed in `eb12124`** (`requestSingleInstanceLock()` added).
+      **Re-verified on Windows**: launched a second instance while the first
+      was running. Net functional result is correct — only one listener
+      ended up on each of ports 3001/8080, the original window/session kept
+      working, and the second process exited on its own with no crash and no
+      orphaned window. **Minor cosmetic note**: the second instance's console
+      still logs its own "Starting servers... All servers ready, loading
+      app..." lines before it quits, meaning the lock check happens after
+      that logging/startup work runs rather than short-circuiting
+      immediately — harmless (no port conflict, no visible second window)
+      but worth tightening later so a second launch exits instantly instead
+      of doing wasted work first. **Platform: both** (Mac not independently
+      verified). Note: visual "does the original window get focused"
+      behavior was not confirmed (no GUI access this pass) — only the
+      network/process-level outcome was checked.
 
 ## UX feedback (from live testing, non-blocking but should ship with the fixes above)
 
@@ -90,8 +132,35 @@ Windows and Mac builds** unless noted otherwise.
 
 ## Build info (Windows)
 
+### Original pass
 - Commit tested: `cb36e59`
 - Installer SHA256: `b0ef93f49e280df5a365d095ed00ac649d1a0b48ee39c36a84ceaa0ca80a17c0`
+- Installer size: 156.7 MB (Chromium not yet bundled at this point)
+
+### Rebuild re-verification pass (this update)
+- Commit tested: `d707090` (pricing/trial commit, on top of `3f1faf6`)
+- Installer: `dist-electron/GroupBlast Setup 0.1.0.exe`
+- Installer SHA256: `8e349db7c3e0f245fc06f1bd39fada85e98459586a5fa06510a2f94220b340e7`
+- Installer size: 382,553,283 bytes (~365 MiB / 383 MB) — up from 156.7 MB
+  because Chromium is now bundled. Confirmed present at
+  `resources/pw-browsers/chromium-1228/chrome-win64/chrome.exe` in the
+  unpacked output, so a fresh machine needs no manual
+  `npx playwright install chromium` step.
+- Build pipeline (`npm install` → `@electron/rebuild -f -w better-sqlite3` →
+  `playwright install chromium` into `pw-browsers/` → `npm run build` →
+  `npm run electron:build:win`) completed with no errors.
+- CLI-verifiable checks passed on the rebuilt app (run from
+  `dist-electron/win-unpacked/GroupBlast.exe` directly, not through a full
+  uninstall/reinstall cycle — that step needs a human at the Windows GUI):
+  - `/api/health` responds `{"ok":true,...}` on both cold (~10s) and warm
+    (~3s) launch.
+  - `netstat` confirms both port 3001 and port 8080 listen on `127.0.0.1`
+    only, never `0.0.0.0`.
+  - Single-instance lock: see re-verification note above.
+- **Not yet re-verified this pass** (needs a human, see scope note at top):
+  installer GUI run + SmartScreen click-through, magic-link email login,
+  Facebook Chromium login, group import, compose/schedule UI, and an actual
+  post landing in a real Facebook group.
 
 ## Pricing / trial changes (2026-06-30, post-audit) — apply to Mac build too
 
@@ -119,3 +188,22 @@ commit.** Nothing to port separately.
 - [ ] Military/first responder discount has **no identity verification** —
       it's a trust-based code, same as a typical SaaS promo code. Revisit if
       abuse becomes a problem.
+
+## Overall verdict
+
+**Conditional GO for Windows testers**, with one condition: a human needs to
+run the live end-to-end flow (magic-link login → Connect Facebook → import
+groups → compose → post to one real group) once on this exact rebuild
+(`d707090`, installer SHA256 `8e349db7c3e0f245fc06f1bd39fada85e98459586a5fa06510a2f94220b340e7`)
+before wider distribution. Reasoning:
+
+- All 4 blockers/high-priority items from the original audit are fixed in
+  code and re-verified at the level this pass could check (build succeeds,
+  Chromium is actually bundled, ports are loopback-only, single-instance
+  lock produces no crash/conflict).
+- The live account/GUI flow (email login, Facebook session, real group post)
+  was verified once before on an older build (`cb36e59`) but not on this
+  rebuild — a lot of relevant code has changed since (UI polish, Chromium
+  bundling path, single-instance lock, pricing/trial gating), so it needs
+  re-confirmation on real hardware with real accounts before shipping wider.
+- Not verified on Mac at all — treat as Windows-only clearance.
