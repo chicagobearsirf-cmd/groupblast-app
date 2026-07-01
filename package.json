@@ -40,6 +40,12 @@
       ".env.example",
       ".npmrc"
     ],
+    "extraResources": [
+      {
+        "from": "pw-browsers",
+        "to": "pw-browsers"
+      }
+    ],
     "mac": {
       "target": "dmg",
       "icon": "build/icon.png",

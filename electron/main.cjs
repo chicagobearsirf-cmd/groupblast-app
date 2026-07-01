@@ -42,11 +42,19 @@ function spawnNode(scriptPath, scriptArgs, extraEnv) {
   });
 }
 
+// Playwright's Chromium is bundled as an extraResource (pw-browsers) so fresh
+// machines don't need to run `playwright install`. Point Playwright at it. In
+// dev it falls back to the normal per-user Playwright cache.
+const PW_BROWSERS_PATH = app.isPackaged
+  ? path.join(process.resourcesPath, "pw-browsers")
+  : path.join(ROOT, "pw-browsers");
+
 function startApiServer() {
   apiProcess = spawnNode(TSX_CLI, ["src/local-api/server.ts"], {
     NODE_ENV: "development",
     API_PORT: String(API_PORT),
     GROUPBLAST_DATA_DIR: DATA_DIR,
+    PLAYWRIGHT_BROWSERS_PATH: PW_BROWSERS_PATH,
   });
   apiProcess.stdout.on("data", (d) => log(`[api] ${d.toString().trim()}`));
   apiProcess.stderr.on("data", (d) => log(`[api:err] ${d.toString().trim()}`));
@@ -54,7 +62,7 @@ function startApiServer() {
 }
 
 function startWebServer() {
-  webProcess = spawnNode(VITE_CLI, ["dev", "--port", String(WEB_PORT), "--strictPort"], {
+  webProcess = spawnNode(VITE_CLI, ["dev", "--port", String(WEB_PORT), "--strictPort", "--host", "127.0.0.1"], {
     NODE_ENV: "development",
     VITE_CACHE_DIR,
   });
@@ -122,15 +130,32 @@ function killChildren() {
   }
 }
 
+// Only allow one running copy. A second launch would fail to bind port 8080
+// (strictPort) and could kill the first instance's backend. Instead, focus the
+// window that's already open.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 app.whenReady().then(async () => {
   log(`Starting servers (packaged=${app.isPackaged}, ROOT=${ROOT})...`);
   showLoadingWindow();
   startApiServer();
   startWebServer();
   try {
+    // First launch on a cold machine bundles Vite deps, which can take a few
+    // minutes. Use a generous timeout so a slow first run doesn't error out.
     await Promise.all([
-      waitForServer(API_PORT, 90000),
-      waitForServer(WEB_PORT, 90000),
+      waitForServer(API_PORT, 300000),
+      waitForServer(WEB_PORT, 300000),
     ]);
     log("All servers ready, loading app...");
     if (mainWindow) {

@@ -41,3 +41,4 @@ data/
 # Electron build output
 dist-electron/
 build/icon-square.png
+pw-browsers/

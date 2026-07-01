@@ -12,6 +12,10 @@ export default defineConfig({
     // shell redirects Vite's dep-optimization cache to a writable per-user path.
     cacheDir: process.env.VITE_CACHE_DIR || undefined,
     server: {
+      // Bind to loopback only. The packaged app spawns this dev server; without
+      // this, Vite listens on all interfaces and its /api proxy would expose the
+      // local Facebook-automation API (port 3001) to anyone on the LAN.
+      host: "127.0.0.1",
       proxy: {
         "/api": "http://localhost:3001",
       },
