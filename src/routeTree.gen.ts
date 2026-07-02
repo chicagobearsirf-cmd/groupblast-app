@@ -23,6 +23,7 @@ import { Route as ContentRouteImport } from './routes/content'
 import { Route as ComposeRouteImport } from './routes/compose'
 import { Route as CloudSetupRouteImport } from './routes/cloud-setup'
 import { Route as AuthCallbackRouteImport } from './routes/auth-callback'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 
 const TeamRoute = TeamRouteImport.update({
@@ -95,6 +96,11 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth-callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -103,6 +109,7 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/auth-callback': typeof AuthCallbackRoute
   '/cloud-setup': typeof CloudSetupRoute
   '/compose': typeof ComposeRoute
@@ -120,6 +127,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/auth-callback': typeof AuthCallbackRoute
   '/cloud-setup': typeof CloudSetupRoute
   '/compose': typeof ComposeRoute
@@ -138,6 +146,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/auth-callback': typeof AuthCallbackRoute
   '/cloud-setup': typeof CloudSetupRoute
   '/compose': typeof ComposeRoute
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/auth-callback'
     | '/cloud-setup'
     | '/compose'
@@ -174,6 +184,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
     | '/auth-callback'
     | '/cloud-setup'
     | '/compose'
@@ -191,6 +202,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/admin'
     | '/auth-callback'
     | '/cloud-setup'
     | '/compose'
@@ -209,6 +221,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   CloudSetupRoute: typeof CloudSetupRoute
   ComposeRoute: typeof ComposeRoute
@@ -325,6 +338,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -337,6 +357,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   CloudSetupRoute: CloudSetupRoute,
   ComposeRoute: ComposeRoute,
