@@ -8,23 +8,52 @@ import { usePlanStatus } from "@/hooks/use-plan-status";
 const contactEmail = "guysadwise@gmail.com";
 const MONTHLY_PRICE = 97;
 
+// Stripe Payment Link (created in the Stripe dashboard). client_reference_id
+// carries the Supabase user id so the stripe-webhook edge function can flip
+// user_plans.plan without any manual mapping. Empty env → mailto fallback.
+const stripePaymentLink = import.meta.env.VITE_STRIPE_PAYMENT_LINK as string | undefined;
+
+function buildCheckoutUrl(userId: string, email?: string | null, promoCode?: string | null) {
+  if (!stripePaymentLink) return null;
+  const url = new URL(stripePaymentLink);
+  url.searchParams.set("client_reference_id", userId);
+  if (email) url.searchParams.set("prefilled_email", email);
+  if (promoCode) url.searchParams.set("prefilled_promo_code", promoCode);
+  return url.toString();
+}
+
 function priceAfterDiscount(discountPercent: number) {
   return (MONTHLY_PRICE * (1 - discountPercent / 100)).toFixed(2);
 }
 
-function TrialBanner({ daysRemaining }: { daysRemaining: number }) {
+function TrialBanner({
+  daysRemaining,
+  promoCode,
+}: {
+  daysRemaining: number;
+  promoCode: string | null;
+}) {
+  const { user } = useAuth();
+  const checkoutUrl = user ? buildCheckoutUrl(user.id, user.email, promoCode) : null;
+
   // Final day: switch to an urgent banner with a direct subscribe CTA so the
   // hard gate the next day is never a surprise.
   if (daysRemaining <= 1) {
     return (
       <div className="border-b bg-amber-500 px-4 py-2 text-center text-sm font-semibold text-amber-950">
         Your free trial ends today — {""}
-        <a
-          href={`mailto:${contactEmail}?subject=${encodeURIComponent("GroupBlast subscription")}`}
-          className="underline"
-        >
-          email us to keep posting
-        </a>
+        {checkoutUrl ? (
+          <a href={checkoutUrl} target="_blank" rel="noreferrer" className="underline">
+            subscribe now to keep posting
+          </a>
+        ) : (
+          <a
+            href={`mailto:${contactEmail}?subject=${encodeURIComponent("GroupBlast subscription")}`}
+            className="underline"
+          >
+            email us to keep posting
+          </a>
+        )}
       </div>
     );
   }
@@ -37,6 +66,7 @@ function TrialBanner({ daysRemaining }: { daysRemaining: number }) {
 }
 
 function TrialEndedScreen() {
+  const { user } = useAuth();
   const plan = usePlanStatus();
   const [code, setCode] = useState("");
   const [applying, setApplying] = useState(false);
@@ -61,6 +91,8 @@ function TrialEndedScreen() {
   const subject = hasDiscount
     ? `GroupBlast subscription (code ${plan.promoCode})`
     : "GroupBlast subscription";
+
+  const checkoutUrl = user ? buildCheckoutUrl(user.id, user.email, plan.promoCode) : null;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-white px-4 text-[#0f172a]">
@@ -96,15 +128,29 @@ function TrialEndedScreen() {
         </div>
 
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-          <Button asChild className="bg-[#1e3a5f] text-white hover:bg-[#172f4f]">
-            <a href={`mailto:${contactEmail}?subject=${encodeURIComponent(subject)}`}>
-              Contact us to subscribe
-            </a>
-          </Button>
+          {checkoutUrl ? (
+            <Button asChild className="bg-[#1e3a5f] text-white hover:bg-[#172f4f]">
+              <a href={checkoutUrl} target="_blank" rel="noreferrer">
+                Subscribe — ${price}/month
+              </a>
+            </Button>
+          ) : (
+            <Button asChild className="bg-[#1e3a5f] text-white hover:bg-[#172f4f]">
+              <a href={`mailto:${contactEmail}?subject=${encodeURIComponent(subject)}`}>
+                Contact us to subscribe
+              </a>
+            </Button>
+          )}
           <Button asChild variant="outline">
             <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
           </Button>
         </div>
+        {checkoutUrl ? (
+          <p className="mt-4 text-sm text-slate-500">
+            Checkout opens in your browser. When you're done, come back to this window — access
+            unlocks automatically.
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -131,7 +177,9 @@ export function TrialGate({ children }: { children: ReactNode }) {
 
   return (
     <>
-      {plan.status === "trial" ? <TrialBanner daysRemaining={plan.daysRemaining} /> : null}
+      {plan.status === "trial" ? (
+        <TrialBanner daysRemaining={plan.daysRemaining} promoCode={plan.promoCode} />
+      ) : null}
       {children}
     </>
   );
