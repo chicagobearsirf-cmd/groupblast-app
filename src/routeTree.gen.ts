@@ -19,6 +19,7 @@ import { Route as ImportRouteImport } from './routes/import'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as GroupsRouteImport } from './routes/groups'
 import { Route as ExtensionRouteImport } from './routes/extension'
+import { Route as ContentRouteImport } from './routes/content'
 import { Route as ComposeRouteImport } from './routes/compose'
 import { Route as CloudSetupRouteImport } from './routes/cloud-setup'
 import { Route as AuthCallbackRouteImport } from './routes/auth-callback'
@@ -74,6 +75,11 @@ const ExtensionRoute = ExtensionRouteImport.update({
   path: '/extension',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ContentRoute = ContentRouteImport.update({
+  id: '/content',
+  path: '/content',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ComposeRoute = ComposeRouteImport.update({
   id: '/compose',
   path: '/compose',
@@ -100,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/auth-callback': typeof AuthCallbackRoute
   '/cloud-setup': typeof CloudSetupRoute
   '/compose': typeof ComposeRoute
+  '/content': typeof ContentRoute
   '/extension': typeof ExtensionRoute
   '/groups': typeof GroupsRoute
   '/history': typeof HistoryRoute
@@ -116,6 +123,7 @@ export interface FileRoutesByTo {
   '/auth-callback': typeof AuthCallbackRoute
   '/cloud-setup': typeof CloudSetupRoute
   '/compose': typeof ComposeRoute
+  '/content': typeof ContentRoute
   '/extension': typeof ExtensionRoute
   '/groups': typeof GroupsRoute
   '/history': typeof HistoryRoute
@@ -133,6 +141,7 @@ export interface FileRoutesById {
   '/auth-callback': typeof AuthCallbackRoute
   '/cloud-setup': typeof CloudSetupRoute
   '/compose': typeof ComposeRoute
+  '/content': typeof ContentRoute
   '/extension': typeof ExtensionRoute
   '/groups': typeof GroupsRoute
   '/history': typeof HistoryRoute
@@ -151,6 +160,7 @@ export interface FileRouteTypes {
     | '/auth-callback'
     | '/cloud-setup'
     | '/compose'
+    | '/content'
     | '/extension'
     | '/groups'
     | '/history'
@@ -167,6 +177,7 @@ export interface FileRouteTypes {
     | '/auth-callback'
     | '/cloud-setup'
     | '/compose'
+    | '/content'
     | '/extension'
     | '/groups'
     | '/history'
@@ -183,6 +194,7 @@ export interface FileRouteTypes {
     | '/auth-callback'
     | '/cloud-setup'
     | '/compose'
+    | '/content'
     | '/extension'
     | '/groups'
     | '/history'
@@ -200,6 +212,7 @@ export interface RootRouteChildren {
   AuthCallbackRoute: typeof AuthCallbackRoute
   CloudSetupRoute: typeof CloudSetupRoute
   ComposeRoute: typeof ComposeRoute
+  ContentRoute: typeof ContentRoute
   ExtensionRoute: typeof ExtensionRoute
   GroupsRoute: typeof GroupsRoute
   HistoryRoute: typeof HistoryRoute
@@ -284,6 +297,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ExtensionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/content': {
+      id: '/content'
+      path: '/content'
+      fullPath: '/content'
+      preLoaderRoute: typeof ContentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/compose': {
       id: '/compose'
       path: '/compose'
@@ -320,6 +340,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthCallbackRoute: AuthCallbackRoute,
   CloudSetupRoute: CloudSetupRoute,
   ComposeRoute: ComposeRoute,
+  ContentRoute: ContentRoute,
   ExtensionRoute: ExtensionRoute,
   GroupsRoute: GroupsRoute,
   HistoryRoute: HistoryRoute,

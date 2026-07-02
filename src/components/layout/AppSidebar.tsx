@@ -6,6 +6,7 @@ import {
   ListOrdered,
   History,
   Settings,
+  Sparkles,
 } from "lucide-react";
 import { Link, type LinkOptions } from "@tanstack/react-router";
 import {
@@ -28,6 +29,7 @@ const items = [
   { title: "Home", url: "/", icon: LayoutDashboard, tour: "nav-dashboard" },
   { title: "My Groups", url: "/groups", icon: Users, tour: "nav-groups" },
   { title: "New Post", url: "/compose", icon: PenTool, tour: "nav-composer" },
+  { title: "Automated Content", url: "/content", icon: Sparkles, tour: "nav-content" },
   { title: "Scheduled", url: "/queue", icon: ListOrdered, tour: "nav-queue" },
   { title: "History", url: "/history", icon: History, tour: "nav-history" },
   { title: "Add Groups", url: "/import", icon: FileUp, tour: "nav-import" },

@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "@/lib/notify";
@@ -33,6 +33,23 @@ function ComposerPage() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
+  const [handedOffImage, setHandedOffImage] = useState<string | null>(null);
+
+  // Draft handed off from Automated Content ("Use in post"). The queue posts
+  // text only, so the picture gets a download link for manual attach.
+  useEffect(() => {
+    const raw = window.sessionStorage.getItem("groupblast.composeDraft");
+    if (!raw) return;
+    window.sessionStorage.removeItem("groupblast.composeDraft");
+    try {
+      const draft = JSON.parse(raw) as { source?: string; caption?: string; imageUrl?: string | null };
+      if (draft.source !== "ai" || !draft.caption) return;
+      setPostText(draft.caption);
+      setHandedOffImage(draft.imageUrl ?? null);
+    } catch {
+      // ignore malformed handoff
+    }
+  }, []);
 
   const filtered = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -98,6 +115,24 @@ function ComposerPage() {
             <CardTitle className="text-base">Your post</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
+            {handedOffImage ? (
+              <div className="flex items-center gap-3 rounded-md border bg-muted/40 p-2.5">
+                <img
+                  src={handedOffImage}
+                  alt="Generated post picture"
+                  className="h-14 w-14 shrink-0 rounded object-cover"
+                />
+                <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  Your generated picture. The app posts the text — download the picture and add
+                  it to your post on Facebook.
+                </p>
+                <Button size="sm" variant="outline" asChild>
+                  <a href={handedOffImage} download target="_blank" rel="noreferrer">
+                    Download
+                  </a>
+                </Button>
+              </div>
+            ) : null}
             <Textarea
               className="min-h-[220px]"
               value={postText}
