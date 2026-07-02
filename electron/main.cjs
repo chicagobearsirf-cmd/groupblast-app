@@ -49,6 +49,9 @@ const PW_BROWSERS_PATH = app.isPackaged
   ? path.join(process.resourcesPath, "pw-browsers")
   : path.join(ROOT, "pw-browsers");
 
+let quitting = false;
+let apiRestartCount = 0;
+
 function startApiServer() {
   apiProcess = spawnNode(TSX_CLI, ["src/local-api/server.ts"], {
     NODE_ENV: "development",
@@ -58,7 +61,17 @@ function startApiServer() {
   });
   apiProcess.stdout.on("data", (d) => log(`[api] ${d.toString().trim()}`));
   apiProcess.stderr.on("data", (d) => log(`[api:err] ${d.toString().trim()}`));
-  apiProcess.on("exit", (code) => log(`API exited with code ${code}`));
+  apiProcess.on("exit", (code) => {
+    log(`API exited with code ${code}`);
+    // If the API crashes while the app is still running (e.g. a Playwright
+    // browser crash takes it down), restart it so the UI doesn't get stuck on
+    // 502s. Cap restarts to avoid a crash loop burning CPU.
+    if (!quitting && apiRestartCount < 5) {
+      apiRestartCount += 1;
+      log(`Restarting API (attempt ${apiRestartCount}/5)...`);
+      setTimeout(startApiServer, 2000);
+    }
+  });
 }
 
 function startWebServer() {
@@ -142,6 +155,7 @@ function showLoadingWindow() {
 }
 
 function killChildren() {
+  quitting = true; // prevent the API crash-restart from firing during shutdown
   for (const p of [apiProcess, webProcess]) {
     if (p && !p.killed) p.kill("SIGTERM");
   }
