@@ -17,6 +17,7 @@ import type {
   SessionAction,
   SessionStatus,
 } from "@/types";
+import { reportApiError } from "@/lib/error-reporter";
 
 export type ApiHealth = {
   ok: boolean;
@@ -79,6 +80,7 @@ const recordApiError = (error: ApiError) => {
     at: new Date().toISOString(),
   };
   for (const listener of lastErrorListeners) listener(lastApiError);
+  reportApiError(error);
 };
 
 const suggestionForStatus = (status: number, path: string): string => {

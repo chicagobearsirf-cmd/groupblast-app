@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/notify";
 import { api } from "@/lib/api";
+import { reportSessionStatusProblems } from "@/lib/error-reporter";
 import type { SessionAction } from "@/types";
 
 export const queryKeys = {
@@ -32,7 +33,11 @@ export function useSettings() {
 export function useSessionStatus(options: { poll?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.sessionStatus,
-    queryFn: api.sessionStatus,
+    queryFn: async () => {
+      const status = await api.sessionStatus();
+      reportSessionStatusProblems(status);
+      return status;
+    },
     refetchInterval: options.poll === false ? false : 2500,
   });
 }

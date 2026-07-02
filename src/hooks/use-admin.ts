@@ -34,6 +34,28 @@ export type AdminPromoCode = {
   trialingCustomers: number;
 };
 
+export type AdminErrorKind =
+  "crash" | "post_fill_failed" | "login_lost" | "facebook_block" | "api_error" | "unhandled";
+
+export type AdminAppError = {
+  id: string;
+  userId: string;
+  email: string | null;
+  kind: AdminErrorKind;
+  message: string;
+  context: Record<string, unknown>;
+  appVersion: string | null;
+  platform: string | null;
+  createdAt: string;
+};
+
+export type AdminErrorsResponse = {
+  rows: AdminAppError[];
+  last24hCount: number;
+  last24hUsers: number;
+  byKind: Partial<Record<AdminErrorKind, number>>;
+};
+
 type AdminCustomerRpc = {
   user_id?: string;
   email?: string | null;
@@ -57,6 +79,25 @@ type AdminPromoCodeRpc = {
   trialing_customers?: number;
 };
 
+type AdminAppErrorRpc = {
+  id?: string;
+  user_id?: string;
+  email?: string | null;
+  kind?: string;
+  message?: string;
+  context?: Record<string, unknown> | null;
+  app_version?: string | null;
+  platform?: string | null;
+  created_at?: string;
+};
+
+type AdminErrorsRpc = {
+  rows?: AdminAppErrorRpc[];
+  last_24h_count?: number;
+  last_24h_users?: number;
+  by_kind?: Record<string, number>;
+};
+
 type AdminStatsRpc = {
   total_users?: number;
   trialing?: number;
@@ -70,6 +111,7 @@ export const adminQueryKeys = {
   stats: ["admin", "stats"] as const,
   customers: ["admin", "customers"] as const,
   promoCodes: ["admin", "promo-codes"] as const,
+  errors: (kind: AdminErrorKind | "all") => ["admin", "errors", kind] as const,
 };
 
 function requireClient() {
@@ -107,6 +149,34 @@ function mapPromoCode(row: AdminPromoCodeRpc): AdminPromoCode {
     payingCustomers: Number(row.paying_customers ?? 0),
     trialingCustomers: Number(row.trialing_customers ?? 0),
   };
+}
+
+function mapAppError(row: AdminAppErrorRpc): AdminAppError {
+  return {
+    id: row.id ?? "",
+    userId: row.user_id ?? "",
+    email: row.email ?? null,
+    kind: parseErrorKind(row.kind),
+    message: row.message ?? "Unknown error",
+    context: row.context ?? {},
+    appVersion: row.app_version ?? null,
+    platform: row.platform ?? null,
+    createdAt: row.created_at ?? "",
+  };
+}
+
+function parseErrorKind(kind: string | undefined): AdminErrorKind {
+  if (
+    kind === "crash" ||
+    kind === "post_fill_failed" ||
+    kind === "login_lost" ||
+    kind === "facebook_block" ||
+    kind === "api_error" ||
+    kind === "unhandled"
+  ) {
+    return kind;
+  }
+  return "unhandled";
 }
 
 export function useAdminStats(enabled: boolean) {
@@ -152,6 +222,33 @@ export function useAdminPromoCodes(enabled: boolean) {
       const { data, error } = await client.rpc("admin_list_promo_codes");
       if (error) throw new Error(error.message);
       return requireArray<AdminPromoCodeRpc>(data).map(mapPromoCode);
+    },
+  });
+}
+
+export function useAdminErrors(kind: AdminErrorKind | "all", enabled: boolean) {
+  return useQuery({
+    queryKey: adminQueryKeys.errors(kind),
+    enabled,
+    queryFn: async (): Promise<AdminErrorsResponse> => {
+      const client = requireClient();
+      const { data, error } = await client.rpc("admin_list_errors", {
+        p_kind: kind === "all" ? null : kind,
+        p_limit: 150,
+      });
+      if (error) throw new Error(error.message);
+      const payload = (data ?? {}) as AdminErrorsRpc;
+      return {
+        rows: requireArray<AdminAppErrorRpc>(payload.rows).map(mapAppError),
+        last24hCount: Number(payload.last_24h_count ?? 0),
+        last24hUsers: Number(payload.last_24h_users ?? 0),
+        byKind: Object.fromEntries(
+          Object.entries(payload.by_kind ?? {}).map(([key, value]) => [
+            parseErrorKind(key),
+            Number(value ?? 0),
+          ]),
+        ),
+      };
     },
   });
 }
