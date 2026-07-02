@@ -15,6 +15,7 @@ import {
   type GroupFilterState,
 } from "@/components/groups/GroupFilters";
 import { TextPromptDialog } from "@/components/layout/TextPromptDialog";
+import { ErrorState } from "@/components/layout/ErrorState";
 import { api } from "@/lib/api";
 import {
   queryKeys,
@@ -30,7 +31,7 @@ export const Route = createFileRoute("/groups")({
 });
 
 function GroupsPage() {
-  const { data: groups = [], isLoading } = useGroups();
+  const { data: groups = [], isLoading, isError, refetch } = useGroups();
   const { data: collections = [] } = useCollections();
   const { categories, subcategories, sources } = useGroupTaxonomy();
   const invalidate = useInvalidate();
@@ -221,6 +222,12 @@ function GroupsPage() {
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading groups…</p>
+      ) : isError ? (
+        <ErrorState
+          title="Can't reach the local API"
+          text="Group data could not load from the local automation service."
+          onRetry={() => void refetch()}
+        />
       ) : (
         <GroupsTable
           groups={filtered}

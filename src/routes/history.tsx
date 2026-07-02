@@ -20,6 +20,7 @@ import {
 import { StatusBadge } from "@/components/groups/GroupStatusBadge";
 import { ResultsTable } from "@/components/history/ResultsTable";
 import { EmptyState } from "@/components/layout/EmptyState";
+import { ErrorState } from "@/components/layout/ErrorState";
 import { useHistory } from "@/hooks/use-api";
 import type { ResultStatus } from "@/types";
 
@@ -31,7 +32,7 @@ const ALL_STATUSES = "__all__";
 const resultStatuses: ResultStatus[] = ["posted", "skipped", "failed", "needs_review", "pending"];
 
 function HistoryPage() {
-  const { data: history } = useHistory();
+  const { data: history, isLoading, isError, refetch } = useHistory();
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
@@ -70,7 +71,15 @@ function HistoryPage() {
             <CardTitle className="text-base">Sessions</CardTitle>
           </CardHeader>
           <CardContent>
-            {history?.sessions.length ? (
+            {isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading history…</p>
+            ) : isError ? (
+              <ErrorState
+                title="Can't reach the local API"
+                text="History could not load from the local automation service."
+                onRetry={() => void refetch()}
+              />
+            ) : history?.sessions.length ? (
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
@@ -203,7 +212,17 @@ function HistoryPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <ResultsTable results={filteredResults} />
+              {isLoading ? (
+                <p className="text-sm text-muted-foreground">Loading results…</p>
+              ) : isError ? (
+                <ErrorState
+                  title="Can't reach the local API"
+                  text="Results could not load from the local automation service."
+                  onRetry={() => void refetch()}
+                />
+              ) : (
+                <ResultsTable results={filteredResults} />
+              )}
             </CardContent>
           </Card>
         </div>

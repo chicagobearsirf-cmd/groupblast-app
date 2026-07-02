@@ -21,6 +21,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StatusBadge } from "@/components/groups/GroupStatusBadge";
 import { ResultsTable } from "@/components/history/ResultsTable";
 import { EmptyState } from "@/components/layout/EmptyState";
+import { ErrorState } from "@/components/layout/ErrorState";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { useForceStop, useSessionAction, useSessionStatus, useSettings } from "@/hooks/use-api";
 import type { SessionAction } from "@/types";
@@ -30,13 +31,43 @@ export const Route = createFileRoute("/queue")({
 });
 
 function QueuePage() {
-  const { data: status } = useSessionStatus();
+  const { data: status, isLoading, isError, refetch } = useSessionStatus();
   const { data: settings } = useSettings();
   const sessionAction = useSessionAction(status?.session?.id);
   const forceStop = useForceStop();
 
-  if (!status) {
+  if (isLoading) {
     return <p className="text-sm text-muted-foreground">Loading session status…</p>;
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="text-2xl font-bold">Scheduled</h1>
+        <ErrorState
+          title="Can't reach the local API"
+          text="The queue status could not load from the local automation service."
+          onRetry={() => void refetch()}
+        />
+      </div>
+    );
+  }
+
+  if (!status) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="text-2xl font-bold">Scheduled</h1>
+        <EmptyState
+          title="Nothing scheduled yet"
+          text="Write a post on the New Post page to schedule it here."
+        />
+        <div>
+          <Button asChild>
+            <Link to="/compose">Go to New Post</Link>
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   if (!status.session) {
