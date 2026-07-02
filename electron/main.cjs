@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, dialog } = require("electron");
+const { app, BrowserWindow, shell, dialog, Menu } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const http = require("http");
@@ -89,6 +89,21 @@ function waitForServer(port, timeout = 60000) {
   });
 }
 
+// Right-click menu with the standard edit actions. Without this, Electron
+// windows have NO context menu at all — users can't right-click to copy/paste.
+function attachContextMenu(win) {
+  win.webContents.on("context-menu", (_event, params) => {
+    const template = [
+      { role: "cut", enabled: params.editFlags.canCut },
+      { role: "copy", enabled: params.editFlags.canCopy },
+      { role: "paste", enabled: params.editFlags.canPaste },
+      { type: "separator" },
+      { role: "selectAll" },
+    ];
+    Menu.buildFromTemplate(template).popup({ window: win });
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -96,6 +111,7 @@ function createWindow() {
     title: "GroupBlast",
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
+  attachContextMenu(mainWindow);
   mainWindow.loadURL(`http://localhost:${WEB_PORT}`);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -113,6 +129,7 @@ function showLoadingWindow() {
     title: "GroupBlast",
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
+  attachContextMenu(mainWindow);
   mainWindow.loadURL(
     "data:text/html;charset=utf-8," +
       encodeURIComponent(

@@ -425,6 +425,10 @@ function SettingsPage() {
                 value={form.maxGroupsPerSession}
                 onChange={(event) => set({ maxGroupsPerSession: Number(event.target.value) })}
               />
+              <p className="text-xs text-muted-foreground">
+                You can raise this anytime — it's just a safety cap on how many groups one run
+                will post to.
+              </p>
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="default-category">Default category</Label>

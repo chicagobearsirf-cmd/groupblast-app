@@ -67,7 +67,7 @@ const defaultSettings: AppSettings = {
   defaultMode: "human_review",
   minDelaySeconds: 20,
   maxDelaySeconds: 45,
-  maxGroupsPerSession: 25,
+  maxGroupsPerSession: 250,
   maxJoinedGroupsSyncPerRun: 500,
   joinedGroupsSyncScrollDelayMs: 1500,
   joinedGroupsSyncStopAfterNoNewPasses: 5,
