@@ -8,6 +8,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ErrorState } from "@/components/layout/ErrorState";
 import { api } from "@/lib/api";
 import { queryKeys, useGroups, useInvalidate, useSettings } from "@/hooks/use-api";
@@ -34,6 +43,9 @@ function ComposerPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [handedOffImage, setHandedOffImage] = useState<string | null>(null);
+  const [postMode, setPostMode] = useState<"now" | "spread">("now");
+  const [spreadPreset, setSpreadPreset] = useState("3");
+  const [customDays, setCustomDays] = useState("7");
 
   // Draft handed off from Automated Content ("Use in post"). The queue posts
   // text only, so the picture gets a download link for manual attach.
@@ -42,7 +54,11 @@ function ComposerPage() {
     if (!raw) return;
     window.sessionStorage.removeItem("groupblast.composeDraft");
     try {
-      const draft = JSON.parse(raw) as { source?: string; caption?: string; imageUrl?: string | null };
+      const draft = JSON.parse(raw) as {
+        source?: string;
+        caption?: string;
+        imageUrl?: string | null;
+      };
       if (draft.source !== "ai" || !draft.caption) return;
       setPostText(draft.caption);
       setHandedOffImage(draft.imageUrl ?? null);
@@ -71,6 +87,26 @@ function ComposerPage() {
   const estimateSeconds = settings
     ? selected.length * ((settings.minDelaySeconds + settings.maxDelaySeconds) / 2 + 20)
     : 0;
+  const dailyCap = useMemo(() => {
+    const raw = Number((settings as { maxPostsPerDay?: number } | undefined)?.maxPostsPerDay);
+    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 25;
+  }, [settings]);
+  const spreadDays = useMemo(() => {
+    const raw = spreadPreset === "custom" ? Number(customDays) : Number(spreadPreset);
+    return Math.max(1, Math.min(30, Math.floor(Number.isFinite(raw) ? raw : 1)));
+  }, [customDays, spreadPreset]);
+  const spreadSummary = useMemo(() => {
+    const actualDays = Math.max(spreadDays, Math.ceil(selected.length / dailyCap) || 1);
+    const postsPerDay = selected.length ? Math.ceil(selected.length / actualDays) : 0;
+    const finishDate = new Date();
+    finishDate.setDate(finishDate.getDate() + actualDays - 1);
+    return {
+      actualDays,
+      postsPerDay,
+      finishLabel: finishDate.toLocaleDateString(undefined, { weekday: "long" }),
+      limitedByCap: actualDays > spreadDays,
+    };
+  }, [dailyCap, selected.length, spreadDays]);
 
   const toggleGroup = useCallback((id: string, checked: boolean) => {
     setSelected((prev) => {
@@ -85,9 +121,15 @@ function ComposerPage() {
   const createSession = async () => {
     setCreating(true);
     try {
-      await api.createSession(postText, selected);
-      await invalidate(queryKeys.sessionStatus, queryKeys.history);
-      toast.success("Queue created — head to Scheduled to start.");
+      if (postMode === "spread") {
+        await api.createScheduledPosts(postText, selected, spreadDays);
+        await invalidate(queryKeys.scheduledPosts, queryKeys.scheduledSummary);
+        toast.success("Posts scheduled.");
+      } else {
+        await api.createSession(postText, selected);
+        await invalidate(queryKeys.sessionStatus, queryKeys.history);
+        toast.success("Queue created — head to Scheduled to start.");
+      }
       void navigate({ to: "/queue" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create queue.");
@@ -123,8 +165,8 @@ function ComposerPage() {
                   className="h-14 w-14 shrink-0 rounded object-cover"
                 />
                 <p className="min-w-0 flex-1 text-xs text-muted-foreground">
-                  Your generated picture. The app posts the text — download the picture and add
-                  it to your post on Facebook.
+                  Your generated picture. The app posts the text — download the picture and add it
+                  to your post on Facebook.
                 </p>
                 <Button size="sm" variant="outline" asChild>
                   <a href={handedOffImage} download target="_blank" rel="noreferrer">
@@ -142,8 +184,68 @@ function ComposerPage() {
             />
             {selected.length > 0 && postText.trim() ? (
               <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-                {selected.length} group{selected.length === 1 ? "" : "s"} selected ·{" "}
-                ~{Math.ceil(estimateSeconds / 60)} min
+                {postMode === "spread"
+                  ? `${selected.length} group${selected.length === 1 ? "" : "s"} selected · about ${spreadSummary.postsPerDay} post${spreadSummary.postsPerDay === 1 ? "" : "s"} per day, finishing ${spreadSummary.finishLabel}`
+                  : `${selected.length} group${selected.length === 1 ? "" : "s"} selected · ~${Math.ceil(estimateSeconds / 60)} min`}
+              </div>
+            ) : null}
+            <RadioGroup
+              value={postMode}
+              onValueChange={(value) => setPostMode(value as "now" | "spread")}
+              className="grid gap-2 sm:grid-cols-2"
+            >
+              <Label className="flex cursor-pointer items-start gap-2 rounded-md border p-3">
+                <RadioGroupItem value="now" />
+                <span>
+                  <span className="block text-sm font-medium">Post now</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Create a queue you start from Scheduled.
+                  </span>
+                </span>
+              </Label>
+              <Label className="flex cursor-pointer items-start gap-2 rounded-md border p-3">
+                <RadioGroupItem value="spread" />
+                <span>
+                  <span className="block text-sm font-medium">Spread over days</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Drip posts during daytime hours.
+                  </span>
+                </span>
+              </Label>
+            </RadioGroup>
+            {postMode === "spread" ? (
+              <div className="rounded-md border p-3">
+                <div className="grid gap-2 sm:grid-cols-[1fr_120px]">
+                  <Select value={spreadPreset} onValueChange={setSpreadPreset}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Spread over" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 day</SelectItem>
+                      <SelectItem value="2">2 days</SelectItem>
+                      <SelectItem value="3">3 days</SelectItem>
+                      <SelectItem value="5">5 days</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={customDays}
+                    onChange={(event) => setCustomDays(event.target.value)}
+                    disabled={spreadPreset !== "custom"}
+                    aria-label="Custom days"
+                  />
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  About {spreadSummary.postsPerDay} post
+                  {spreadSummary.postsPerDay === 1 ? "" : "s"} per day, finishing{" "}
+                  {spreadSummary.finishLabel}
+                  {spreadSummary.limitedByCap
+                    ? ` because the daily limit spreads this across ${spreadSummary.actualDays} days.`
+                    : "."}
+                </p>
               </div>
             ) : null}
             {selected.length > 5 ? (
@@ -159,7 +261,11 @@ function ComposerPage() {
               onClick={() => void createSession()}
               data-tour="compose-create-queue"
             >
-              {creating ? "Creating…" : `Create queue${selected.length ? ` (${selected.length})` : ""}`}
+              {creating
+                ? "Creating…"
+                : postMode === "spread"
+                  ? `Schedule posts${selected.length ? ` (${selected.length})` : ""}`
+                  : `Create queue${selected.length ? ` (${selected.length})` : ""}`}
             </Button>
           </CardContent>
         </Card>

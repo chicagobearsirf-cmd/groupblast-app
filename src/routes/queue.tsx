@@ -15,16 +15,33 @@ import {
   XOctagon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { StatusBadge } from "@/components/groups/GroupStatusBadge";
 import { ResultsTable } from "@/components/history/ResultsTable";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { ErrorState } from "@/components/layout/ErrorState";
 import { StatsCard } from "@/components/dashboard/StatsCard";
-import { useForceStop, useSessionAction, useSessionStatus, useSettings } from "@/hooks/use-api";
-import type { SessionAction } from "@/types";
+import {
+  useCancelAllScheduledPosts,
+  useCancelScheduledPost,
+  useForceStop,
+  useScheduledPosts,
+  useSessionAction,
+  useSessionStatus,
+  useSettings,
+} from "@/hooks/use-api";
+import type { ScheduledPost, SessionAction } from "@/types";
 
 export const Route = createFileRoute("/queue")({
   component: QueuePage,
@@ -32,9 +49,17 @@ export const Route = createFileRoute("/queue")({
 
 function QueuePage() {
   const { data: status, isLoading, isError, refetch } = useSessionStatus();
+  const {
+    data: scheduledPosts = [],
+    isLoading: scheduledLoading,
+    isError: scheduledError,
+    refetch: refetchScheduledPosts,
+  } = useScheduledPosts();
   const { data: settings } = useSettings();
   const sessionAction = useSessionAction(status?.session?.id);
   const forceStop = useForceStop();
+  const cancelScheduledPost = useCancelScheduledPost();
+  const cancelAllScheduledPosts = useCancelAllScheduledPosts();
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Loading session status…</p>;
@@ -57,15 +82,16 @@ function QueuePage() {
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-2xl font-bold">Scheduled</h1>
-        <EmptyState
-          title="Nothing scheduled yet"
-          text="Write a post on the New Post page to schedule it here."
+        <ScheduledPostsPanel
+          posts={scheduledPosts}
+          isLoading={scheduledLoading}
+          isError={scheduledError}
+          onRetry={() => void refetchScheduledPosts()}
+          onCancel={(id) => cancelScheduledPost.mutate(id)}
+          onCancelAll={() => cancelAllScheduledPosts.mutate()}
+          canceling={cancelScheduledPost.isPending}
+          cancelingAll={cancelAllScheduledPosts.isPending}
         />
-        <div>
-          <Button asChild>
-            <Link to="/compose">Go to New Post</Link>
-          </Button>
-        </div>
       </div>
     );
   }
@@ -74,9 +100,15 @@ function QueuePage() {
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-2xl font-bold">Scheduled</h1>
-        <EmptyState
-          title="Nothing scheduled yet"
-          text="Write a post on the New Post page to schedule it here."
+        <ScheduledPostsPanel
+          posts={scheduledPosts}
+          isLoading={scheduledLoading}
+          isError={scheduledError}
+          onRetry={() => void refetchScheduledPosts()}
+          onCancel={(id) => cancelScheduledPost.mutate(id)}
+          onCancelAll={() => cancelAllScheduledPosts.mutate()}
+          canceling={cancelScheduledPost.isPending}
+          cancelingAll={cancelAllScheduledPosts.isPending}
         />
         <div>
           <Button asChild>
@@ -111,6 +143,17 @@ function QueuePage() {
           label={status.session.state}
         />
       </div>
+
+      <ScheduledPostsPanel
+        posts={scheduledPosts}
+        isLoading={scheduledLoading}
+        isError={scheduledError}
+        onRetry={() => void refetchScheduledPosts()}
+        onCancel={(id) => cancelScheduledPost.mutate(id)}
+        onCancelAll={() => cancelAllScheduledPosts.mutate()}
+        canceling={cancelScheduledPost.isPending}
+        cancelingAll={cancelAllScheduledPosts.isPending}
+      />
 
       <Card>
         <CardHeader>
@@ -220,7 +263,11 @@ function QueuePage() {
               >
                 <ShieldAlert className="mr-2 h-4 w-4" /> Pending Approval
               </Button>
-              <Button size="sm" variant="outline" onClick={() => act("mark-failed", "Marked failed.")}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => act("mark-failed", "Marked failed.")}
+              >
                 <XCircle className="mr-2 h-4 w-4" /> Mark Failed
               </Button>
               <Button
@@ -230,11 +277,7 @@ function QueuePage() {
               >
                 <ExternalLink className="mr-2 h-4 w-4" /> Open Group
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => act("retry-current", "Retrying.")}
-              >
+              <Button size="sm" variant="outline" onClick={() => act("retry-current", "Retrying.")}>
                 <RotateCcw className="mr-2 h-4 w-4" /> Retry
               </Button>
               <Button
@@ -328,4 +371,133 @@ function QueuePage() {
       </Card>
     </div>
   );
+}
+
+function ScheduledPostsPanel({
+  posts,
+  isLoading,
+  isError,
+  onRetry,
+  onCancel,
+  onCancelAll,
+  canceling,
+  cancelingAll,
+}: {
+  posts: ScheduledPost[];
+  isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
+  onCancel: (id: string) => void;
+  onCancelAll: () => void;
+  canceling: boolean;
+  cancelingAll: boolean;
+}) {
+  const activeCount = posts.filter(
+    (post) => post.status === "pending" || post.status === "processing",
+  ).length;
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <CardTitle className="text-base">Drip schedule</CardTitle>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!activeCount || cancelingAll}
+          onClick={onCancelAll}
+        >
+          Cancel all
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading scheduled posts…</p>
+        ) : isError ? (
+          <ErrorState
+            title="Can't load scheduled posts"
+            text="The local automation service could not return the drip schedule."
+            onRetry={onRetry}
+          />
+        ) : posts.length ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Time</TableHead>
+                <TableHead>Group</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {posts.map((post) => {
+                const canCancel = post.status === "pending" || post.status === "processing";
+                return (
+                  <TableRow key={post.id}>
+                    <TableCell className="whitespace-nowrap">
+                      {formatScheduledTime(post.scheduledFor)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="max-w-[360px] truncate font-medium">{post.groupName}</div>
+                      {post.lastError ? (
+                        <div className="max-w-[360px] truncate text-xs text-muted-foreground">
+                          {post.lastError}
+                        </div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <ScheduledStatusBadge status={post.status} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {canCancel ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={canceling}
+                          onClick={() => onCancel(post.id)}
+                        >
+                          Cancel
+                        </Button>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <EmptyState
+              title="Nothing scheduled yet"
+              text="Write a post on the New Post page to schedule it here."
+            />
+            <div>
+              <Button asChild>
+                <Link to="/compose">Go to New Post</Link>
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ScheduledStatusBadge({ status }: { status: ScheduledPost["status"] }) {
+  if (status === "posted") return <Badge className="bg-emerald-600 text-white">Posted</Badge>;
+  if (status === "failed") return <Badge variant="destructive">Failed</Badge>;
+  if (status === "skipped") return <Badge variant="secondary">Skipped</Badge>;
+  if (status === "canceled") return <Badge variant="outline">Canceled</Badge>;
+  if (status === "processing") return <Badge>Posting now</Badge>;
+  return <Badge variant="secondary">Pending</Badge>;
+}
+
+function formatScheduledTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not scheduled";
+  return date.toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }

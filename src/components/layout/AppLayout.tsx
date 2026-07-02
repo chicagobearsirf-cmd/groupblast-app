@@ -9,6 +9,8 @@ import { TourProvider, useTour } from "@/components/onboarding/TourProvider";
 import { TourOverlay } from "@/components/onboarding/TourOverlay";
 import { AutomationGuard } from "@/components/automation/AutomationGuard";
 import { BrandMark } from "@/components/layout/BrandMark";
+import { Badge } from "@/components/ui/badge";
+import { useScheduledSummary } from "@/hooks/use-api";
 
 function GettingStartedButton() {
   const { start } = useTour();
@@ -17,6 +19,22 @@ function GettingStartedButton() {
       <HelpCircle className="mr-2 h-4 w-4" />
       Getting started
     </Button>
+  );
+}
+
+function ScheduledQueueChip() {
+  const { data: summary } = useScheduledSummary();
+  if (!summary?.activeCount) return null;
+  const next = summary.nextScheduledFor ? new Date(summary.nextScheduledFor) : null;
+  const nextLabel =
+    next && !Number.isNaN(next.getTime())
+      ? next.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+      : "soon";
+  return (
+    <Badge variant="secondary" className="hidden sm:inline-flex">
+      {summary.activeCount} post{summary.activeCount === 1 ? "" : "s"} scheduled · next at{" "}
+      {nextLabel}
+    </Badge>
   );
 }
 
@@ -30,6 +48,7 @@ export function AppLayout() {
             <SidebarTrigger className="-ml-1" />
             <BrandMark size={26} showName className="text-sm" />
             <div className="flex-1" />
+            <ScheduledQueueChip />
             <GettingStartedButton />
           </header>
           <EnvironmentBanner />

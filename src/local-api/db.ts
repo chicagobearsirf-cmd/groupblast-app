@@ -9,6 +9,9 @@ import type {
   GroupStatus,
   PostSession,
   ResultStatus,
+  ScheduledPost,
+  ScheduledPostStatus,
+  ScheduledQueueSummary,
   SessionResult,
 } from "./types";
 
@@ -153,6 +156,25 @@ db.exec(`
     foreign key (sessionId) references post_sessions(id) on delete cascade
   );
 
+  create table if not exists scheduled_posts (
+    id text primary key,
+    groupId text not null,
+    groupName text not null,
+    groupUrl text not null,
+    postText text not null,
+    scheduledFor text not null,
+    earliestRunAt text not null,
+    status text not null default 'pending',
+    attempts integer not null default 0,
+    createdSessionId text,
+    lastError text not null default '',
+    createdAt text not null,
+    updatedAt text not null,
+    completedAt text,
+    foreign key (groupId) references groups(id) on delete cascade,
+    foreign key (createdSessionId) references post_sessions(id) on delete set null
+  );
+
   create table if not exists settings (
     key text primary key,
     value text not null
@@ -250,6 +272,7 @@ const normalizeSettings = (settings: AppSettings): AppSettings => {
 type GroupRow = Omit<FacebookGroup, "tags"> & { tags: string };
 type SessionRow = Omit<PostSession, "selectedGroupIds"> & { selectedGroupIds: string };
 type ResultRow = SessionResult;
+type ScheduledPostRow = ScheduledPost;
 
 const rowToGroup = (row: GroupRow): FacebookGroup => ({
   ...row,
@@ -266,6 +289,11 @@ const rowToSession = (row: SessionRow): PostSession => ({
 const rowToResult = (row: ResultRow): SessionResult => ({
   ...row,
   durationSeconds: Number(row.durationSeconds ?? 0),
+});
+
+const rowToScheduledPost = (row: ScheduledPostRow): ScheduledPost => ({
+  ...row,
+  attempts: Number(row.attempts ?? 0),
 });
 
 export const storage = {
@@ -289,14 +317,12 @@ export const storage = {
   },
   getGroup(groupId: string) {
     const row = db.prepare("select * from groups where id = ?").get(groupId) as
-      | GroupRow
-      | undefined;
+      GroupRow | undefined;
     return row ? rowToGroup(row) : null;
   },
   getGroupByUrl(url: string) {
     const row = db.prepare("select * from groups where url = ?").get(normalizeUrl(url)) as
-      | GroupRow
-      | undefined;
+      GroupRow | undefined;
     return row ? rowToGroup(row) : null;
   },
   upsertGroup(input: Partial<FacebookGroup> & { name: string; url: string }) {
@@ -424,8 +450,7 @@ export const storage = {
   },
   getSettings(): AppSettings {
     const row = db.prepare("select value from settings where key = 'app'").get() as
-      | { value: string }
-      | undefined;
+      { value: string } | undefined;
     const settings = normalizeSettings({
       ...defaultSettings,
       ...decode<Partial<AppSettings>>(row?.value, {}),
@@ -464,14 +489,12 @@ export const storage = {
   },
   getSession(sessionId: string) {
     const row = db.prepare("select * from post_sessions where id = ?").get(sessionId) as
-      | SessionRow
-      | undefined;
+      SessionRow | undefined;
     return row ? rowToSession(row) : null;
   },
   latestSession() {
     const row = db.prepare("select * from post_sessions order by createdAt desc limit 1").get() as
-      | SessionRow
-      | undefined;
+      SessionRow | undefined;
     return row ? rowToSession(row) : null;
   },
   updateSession(sessionId: string, patch: Partial<PostSession>) {
@@ -519,6 +542,168 @@ export const storage = {
         ? (db.prepare(sql).all(sessionId) as ResultRow[])
         : (db.prepare(sql).all() as ResultRow[])
     ).map(rowToResult);
+  },
+  createScheduledPosts(
+    rows: Array<{
+      group: FacebookGroup;
+      postText: string;
+      scheduledFor: string;
+      earliestRunAt?: string;
+    }>,
+  ) {
+    const timestamp = now();
+    const insert = db.prepare(`
+      insert into scheduled_posts (
+        id, groupId, groupName, groupUrl, postText, scheduledFor, earliestRunAt, status,
+        attempts, createdSessionId, lastError, createdAt, updatedAt, completedAt
+      )
+      values (
+        @id, @groupId, @groupName, @groupUrl, @postText, @scheduledFor, @earliestRunAt, @status,
+        @attempts, @createdSessionId, @lastError, @createdAt, @updatedAt, @completedAt
+      )
+    `);
+    const tx = db.transaction(
+      (
+        scheduledRows: Array<{
+          group: FacebookGroup;
+          postText: string;
+          scheduledFor: string;
+          earliestRunAt?: string;
+        }>,
+      ) =>
+        scheduledRows.map((row) => {
+          const scheduledPost: ScheduledPost = {
+            id: id("sch"),
+            groupId: row.group.id,
+            groupName: row.group.name,
+            groupUrl: row.group.url,
+            postText: row.postText,
+            scheduledFor: row.scheduledFor,
+            earliestRunAt: row.earliestRunAt ?? row.scheduledFor,
+            status: "pending",
+            attempts: 0,
+            createdSessionId: null,
+            lastError: "",
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            completedAt: null,
+          };
+          insert.run(scheduledPost);
+          return scheduledPost;
+        }),
+    );
+    return tx(rows);
+  },
+  listScheduledPosts(statuses?: ScheduledPostStatus[]) {
+    const rows = statuses?.length
+      ? (db
+          .prepare(
+            `select * from scheduled_posts where status in (${statuses.map(() => "?").join(",")}) order by scheduledFor asc, createdAt asc`,
+          )
+          .all(...statuses) as ScheduledPostRow[])
+      : (db
+          .prepare("select * from scheduled_posts order by scheduledFor asc, createdAt asc")
+          .all() as ScheduledPostRow[]);
+    return rows.map(rowToScheduledPost);
+  },
+  scheduledQueueSummary(): ScheduledQueueSummary {
+    const activeStatuses: ScheduledPostStatus[] = ["pending", "processing"];
+    const rows = this.listScheduledPosts(activeStatuses);
+    const pendingCount = rows.filter((row) => row.status === "pending").length;
+    const processingCount = rows.filter((row) => row.status === "processing").length;
+    return {
+      pendingCount,
+      processingCount,
+      activeCount: pendingCount + processingCount,
+      nextScheduledFor: rows.find((row) => row.status === "pending")?.scheduledFor ?? null,
+    };
+  },
+  cancelScheduledPost(scheduledPostId: string) {
+    const timestamp = now();
+    db.prepare(
+      `
+      update scheduled_posts
+      set status = 'canceled', updatedAt = ?, completedAt = ?
+      where id = ? and status in ('pending', 'processing')
+    `,
+    ).run(timestamp, timestamp, scheduledPostId);
+    return this.getScheduledPost(scheduledPostId);
+  },
+  cancelAllScheduledPosts() {
+    const timestamp = now();
+    const result = db
+      .prepare(
+        "update scheduled_posts set status = 'canceled', updatedAt = ?, completedAt = ? where status in ('pending', 'processing')",
+      )
+      .run(timestamp, timestamp);
+    return Number(result.changes ?? 0);
+  },
+  getScheduledPost(scheduledPostId: string) {
+    const row = db.prepare("select * from scheduled_posts where id = ?").get(scheduledPostId) as
+      ScheduledPostRow | undefined;
+    return row ? rowToScheduledPost(row) : null;
+  },
+  updateScheduledPost(scheduledPostId: string, patch: Partial<ScheduledPost>) {
+    const existing = this.getScheduledPost(scheduledPostId);
+    if (!existing) return null;
+    const scheduledPost = { ...existing, ...patch, updatedAt: now() };
+    db.prepare(
+      `
+      update scheduled_posts set
+        groupId = @groupId,
+        groupName = @groupName,
+        groupUrl = @groupUrl,
+        postText = @postText,
+        scheduledFor = @scheduledFor,
+        earliestRunAt = @earliestRunAt,
+        status = @status,
+        attempts = @attempts,
+        createdSessionId = @createdSessionId,
+        lastError = @lastError,
+        updatedAt = @updatedAt,
+        completedAt = @completedAt
+      where id = @id
+    `,
+    ).run(scheduledPost);
+    return scheduledPost;
+  },
+  claimDueScheduledPost(currentTime = now()) {
+    const row = db
+      .prepare(
+        "select * from scheduled_posts where status = 'pending' and earliestRunAt <= ? order by earliestRunAt asc, createdAt asc limit 1",
+      )
+      .get(currentTime) as ScheduledPostRow | undefined;
+    if (!row) return null;
+    const timestamp = now();
+    const result = db
+      .prepare(
+        "update scheduled_posts set status = 'processing', attempts = attempts + 1, updatedAt = ? where id = ? and status = 'pending'",
+      )
+      .run(timestamp, row.id);
+    if (!result.changes) return null;
+    return this.getScheduledPost(row.id);
+  },
+  completedScheduledPostsOnLocalDate(dateKey: string) {
+    return Number(
+      (
+        db
+          .prepare(
+            "select count(*) as count from scheduled_posts where status = 'posted' and substr(completedAt, 1, 10) = ?",
+          )
+          .get(dateKey) as { count: number }
+      ).count ?? 0,
+    );
+  },
+  postedResultsBetween(startIso: string, endIso: string) {
+    return Number(
+      (
+        db
+          .prepare(
+            "select count(*) as count from post_session_results where status = 'posted' and timestamp >= ? and timestamp < ?",
+          )
+          .get(startIso, endIso) as { count: number }
+      ).count ?? 0,
+    );
   },
   resultForGroup(sessionId: string, groupId: string) {
     const row = db

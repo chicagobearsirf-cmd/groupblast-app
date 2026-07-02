@@ -12,6 +12,8 @@ import type {
   ImportResult,
   JoinedGroupsSyncStatus,
   PostSession,
+  ScheduledPost,
+  ScheduledQueueSummary,
   SessionAction,
   SessionStatus,
 } from "@/types";
@@ -204,6 +206,20 @@ export const api = {
 
   createSession: (postText: string, selectedGroupIds: string[]) =>
     post<PostSession>("/api/sessions", { postText, selectedGroupIds }),
+  createScheduledPosts: (postText: string, selectedGroupIds: string[], days: number) =>
+    post<{ scheduled: ScheduledPost[]; summary: ScheduledQueueSummary }>("/api/scheduled-posts", {
+      postText,
+      selectedGroupIds,
+      days,
+    }),
+  scheduledPosts: () => request<ScheduledPost[]>("/api/scheduled-posts"),
+  scheduledSummary: () => request<ScheduledQueueSummary>("/api/scheduled-posts/summary"),
+  cancelScheduledPost: (id: string) =>
+    post<{ scheduledPost: ScheduledPost; summary: ScheduledQueueSummary }>(
+      `/api/scheduled-posts/${id}/cancel`,
+    ),
+  cancelAllScheduledPosts: () =>
+    post<{ canceled: number; summary: ScheduledQueueSummary }>("/api/scheduled-posts/cancel-all"),
   sessionAction: (sessionId: string, action: SessionAction) =>
     post<SessionStatus>(`/api/sessions/${sessionId}/${action}`),
   forceStop: () => post<SessionStatus>("/api/runner/force-stop"),

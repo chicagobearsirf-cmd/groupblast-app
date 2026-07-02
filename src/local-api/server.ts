@@ -12,6 +12,8 @@ import {
 import { parseImportAuto, parseImportAutoWithDiagnostics } from "./importer";
 import { runner } from "./runner";
 import { storage } from "./db";
+import { buildSpreadSchedule, scheduledPostDispatcher } from "./scheduler";
+import type { FacebookGroup } from "./types";
 
 const app = express();
 const port = Number(process.env.API_PORT ?? 3001);
@@ -54,6 +56,8 @@ app.use((_req, res, next) => {
 const quietWhenOkPaths = new Set([
   "/api/health",
   "/api/session-status",
+  "/api/scheduled-posts",
+  "/api/scheduled-posts/summary",
   "/api/import-groups/joined-facebook-groups/status",
   "/api/joined-facebook-groups/status",
 ]);
@@ -326,6 +330,46 @@ app.post("/api/sessions", (req, res) => {
   res.status(201).json(storage.createSession(postText, selectedGroupIds));
 });
 
+app.get("/api/scheduled-posts", (_req, res) => res.json(storage.listScheduledPosts()));
+app.get("/api/scheduled-posts/summary", (_req, res) => res.json(storage.scheduledQueueSummary()));
+app.post("/api/scheduled-posts", (req, res) => {
+  const { postText, selectedGroupIds, days } = req.body as {
+    postText: string;
+    selectedGroupIds: string[];
+    days: number;
+  };
+  if (!postText?.trim()) return res.status(400).json({ error: "Post text is required." });
+  if (!selectedGroupIds?.length)
+    return res.status(400).json({ error: "Select at least one group." });
+  const spreadDays = Math.max(1, Math.min(30, Math.floor(Number(days) || 1)));
+  const groups = selectedGroupIds.map((groupId) => storage.getGroup(groupId));
+  const missingCount = groups.filter((group) => !group).length;
+  if (missingCount) {
+    return res.status(400).json({ error: "One or more selected groups could not be found." });
+  }
+  const activeGroups = groups.filter((group): group is FacebookGroup => group?.status === "active");
+  if (!activeGroups.length) {
+    return res.status(400).json({ error: "Select at least one active group." });
+  }
+  const scheduledRows = buildSpreadSchedule(
+    activeGroups,
+    postText.trim(),
+    spreadDays,
+    storage.getSettings(),
+  );
+  const scheduled = storage.createScheduledPosts(scheduledRows);
+  res.status(201).json({ scheduled, summary: storage.scheduledQueueSummary() });
+});
+app.post("/api/scheduled-posts/cancel-all", (_req, res) => {
+  const canceled = storage.cancelAllScheduledPosts();
+  res.json({ canceled, summary: storage.scheduledQueueSummary() });
+});
+app.post("/api/scheduled-posts/:id/cancel", (req, res) => {
+  const scheduledPost = storage.cancelScheduledPost(param(req.params.id));
+  if (!scheduledPost) return res.status(404).json({ error: "Scheduled post not found." });
+  res.json({ scheduledPost, summary: storage.scheduledQueueSummary() });
+});
+
 app.post(
   "/api/sessions/:id/start",
   asyncRoute(async (req, res) => {
@@ -502,6 +546,7 @@ app.listen(port, "127.0.0.1", () => {
   for (const route of routes.filter((r) => r.path.startsWith("/api/facebook"))) {
     console.log(`[api]   ${route.methods.join("/")} ${route.path}`);
   }
+  scheduledPostDispatcher.start();
 });
 
 // Walks the Express router stack to report the method + path of every registered

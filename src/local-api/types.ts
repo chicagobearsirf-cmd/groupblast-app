@@ -1,18 +1,11 @@
 export type GroupStatus = "active" | "paused" | "needs_review" | "failed" | "removed";
 export type ResultStatus = "posted" | "skipped" | "failed" | "needs_review" | "pending";
+export type ScheduledPostStatus =
+  "pending" | "processing" | "posted" | "failed" | "skipped" | "canceled";
 export type SessionState =
-  | "draft"
-  | "running"
-  | "paused"
-  | "stopped"
-  | "completed"
-  | "needs_review";
+  "draft" | "running" | "paused" | "stopped" | "completed" | "needs_review";
 export type FacebookSessionCheckStatus =
-  | "never_checked"
-  | "logged_in"
-  | "not_logged_in"
-  | "checkpoint_or_review"
-  | "unknown";
+  "never_checked" | "logged_in" | "not_logged_in" | "checkpoint_or_review" | "unknown";
 export type BrowserMode = "managed_playwright_profile" | "imported_chrome_profile_snapshot";
 
 export type ChromeProfileDiagnostics = {
@@ -128,6 +121,30 @@ export type SessionResult = {
   message: string;
   timestamp: string;
   durationSeconds: number;
+};
+
+export type ScheduledPost = {
+  id: string;
+  groupId: string;
+  groupName: string;
+  groupUrl: string;
+  postText: string;
+  scheduledFor: string;
+  earliestRunAt: string;
+  status: ScheduledPostStatus;
+  attempts: number;
+  createdSessionId: string | null;
+  lastError: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+};
+
+export type ScheduledQueueSummary = {
+  pendingCount: number;
+  processingCount: number;
+  activeCount: number;
+  nextScheduledFor: string | null;
 };
 
 export type RunnerDiagnostics = {
