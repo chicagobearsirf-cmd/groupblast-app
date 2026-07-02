@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertCircle, Loader2, Save, ShieldCheck, TicketPercent, Users } from "lucide-react";
+import { AlertCircle, Bug, Loader2, Save, ShieldCheck, TicketPercent, Users } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  type AdminAppError,
+  type AdminErrorKind,
   type AdminPromoCode,
   useAdminCustomers,
+  useAdminErrors,
   useAdminPromoCodes,
   useAdminStats,
   useUpdatePromoAffiliate,
@@ -31,11 +34,13 @@ export const Route = createFileRoute("/admin")({
 function AdminPage() {
   const { mode, status: authStatus } = useAuth();
   const planStatus = usePlanStatus();
+  const [errorKind, setErrorKind] = useState<AdminErrorKind | "all">("all");
   const canView = mode !== "local" && planStatus.isAdmin;
   const readyForAdminQueries = canView && authStatus === "authenticated" && !planStatus.isLoading;
   const stats = useAdminStats(readyForAdminQueries);
   const customers = useAdminCustomers(readyForAdminQueries);
   const promoCodes = useAdminPromoCodes(readyForAdminQueries);
+  const appErrors = useAdminErrors(errorKind, readyForAdminQueries);
   const updatePromoAffiliate = useUpdatePromoAffiliate();
 
   const statsCards = useMemo(
@@ -75,7 +80,7 @@ function AdminPage() {
     );
   }
 
-  const firstError = stats.error ?? customers.error ?? promoCodes.error;
+  const firstError = stats.error ?? customers.error ?? promoCodes.error ?? appErrors.error;
 
   return (
     <div className="flex flex-col gap-4">
@@ -83,7 +88,7 @@ function AdminPage() {
         <div>
           <h1 className="text-2xl font-bold">Admin</h1>
           <p className="text-sm text-muted-foreground">
-            Customers, trial status, and partner codes.
+            Health, customers, trial status, and partner codes.
           </p>
         </div>
         <Badge variant="secondary" className="gap-1">
@@ -115,6 +120,16 @@ function AdminPage() {
           </Card>
         ))}
       </div>
+
+      <HealthBugsSection
+        selectedKind={errorKind}
+        onKindChange={setErrorKind}
+        errors={appErrors.data?.rows ?? []}
+        last24hCount={appErrors.data?.last24hCount ?? 0}
+        last24hUsers={appErrors.data?.last24hUsers ?? 0}
+        byKind={appErrors.data?.byKind ?? {}}
+        isLoading={appErrors.isLoading}
+      />
 
       <Card>
         <CardHeader>
@@ -232,6 +247,151 @@ function AdminPage() {
   );
 }
 
+const errorKindLabels: Array<{ value: AdminErrorKind | "all"; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "crash", label: "Crashes" },
+  { value: "post_fill_failed", label: "Post filling" },
+  { value: "facebook_block", label: "Facebook blocks" },
+  { value: "login_lost", label: "Login lost" },
+  { value: "api_error", label: "Local API" },
+  { value: "unhandled", label: "Unhandled" },
+];
+
+function HealthBugsSection({
+  selectedKind,
+  onKindChange,
+  errors,
+  last24hCount,
+  last24hUsers,
+  byKind,
+  isLoading,
+}: {
+  selectedKind: AdminErrorKind | "all";
+  onKindChange: (kind: AdminErrorKind | "all") => void;
+  errors: AdminAppError[];
+  last24hCount: number;
+  last24hUsers: number;
+  byKind: Partial<Record<AdminErrorKind, number>>;
+  isLoading: boolean;
+}) {
+  const topKind = Object.entries(byKind).sort((a, b) => Number(b[1]) - Number(a[1]))[0];
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Bug className="h-4 w-4" />
+              Health / Bugs
+            </CardTitle>
+            <CardDescription>
+              Recent app crashes, local API errors, and posting issues.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {errorKindLabels.map((item) => (
+              <Button
+                key={item.value}
+                type="button"
+                size="sm"
+                variant={selectedKind === item.value ? "default" : "outline"}
+                onClick={() => onKindChange(item.value)}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-md border p-3">
+            <p className="text-xs font-medium uppercase text-muted-foreground">Last 24h</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">{last24hCount}</p>
+          </div>
+          <div className="rounded-md border p-3">
+            <p className="text-xs font-medium uppercase text-muted-foreground">Users affected</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">{last24hUsers}</p>
+          </div>
+          <div className="rounded-md border p-3">
+            <p className="text-xs font-medium uppercase text-muted-foreground">Most common</p>
+            <p className="mt-1 truncate text-2xl font-semibold">
+              {topKind ? labelForErrorKind(topKind[0]) : "None"}
+            </p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Time</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Kind</TableHead>
+                <TableHead>Message</TableHead>
+                <TableHead>Context</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    Loading bug reports
+                  </TableCell>
+                </TableRow>
+              ) : null}
+              {!isLoading && errors.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    No bug reports found.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+              {errors.map((error) => (
+                <TableRow key={error.id}>
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                    {formatDateTime(error.createdAt)}
+                  </TableCell>
+                  <TableCell className="min-w-[200px] font-medium">
+                    {error.email ?? error.userId}
+                  </TableCell>
+                  <TableCell>
+                    <ErrorKindBadge kind={error.kind} />
+                  </TableCell>
+                  <TableCell className="max-w-[320px] truncate">{error.message}</TableCell>
+                  <TableCell className="max-w-[360px] truncate font-mono text-xs text-muted-foreground">
+                    {contextSummary(error.context)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ErrorKindBadge({ kind }: { kind: AdminErrorKind }) {
+  const variant =
+    kind === "crash" || kind === "facebook_block" || kind === "post_fill_failed"
+      ? "destructive"
+      : kind === "api_error"
+        ? "secondary"
+        : "outline";
+  return (
+    <Badge variant={variant} className="whitespace-nowrap">
+      {labelForErrorKind(kind)}
+    </Badge>
+  );
+}
+
+function labelForErrorKind(kind: string) {
+  const match = errorKindLabels.find((item) => item.value === kind);
+  return match?.label ?? kind.replaceAll("_", " ");
+}
+
 function PlanBadge({ plan, isAdmin }: { plan: string; isAdmin: boolean }) {
   const variant = plan === "expired" ? "destructive" : plan === "active" ? "default" : "secondary";
   return (
@@ -325,4 +485,41 @@ function formatDate(value: string | null) {
     day: "numeric",
     year: "numeric",
   }).format(date);
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return "None";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "None";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function contextSummary(context: Record<string, unknown>) {
+  const allowed = [
+    "route",
+    "endpoint",
+    "method",
+    "status",
+    "code",
+    "session_id",
+    "session_state",
+    "result_status",
+    "group_id",
+    "detected_state",
+    "runner_status",
+    "block_cooldown_until",
+  ];
+  const parts = allowed
+    .flatMap((key) => {
+      const value = context[key];
+      if (value === undefined || value === null || value === "") return [];
+      return `${key}: ${String(value)}`;
+    })
+    .slice(0, 5);
+  return parts.join(" | ") || "None";
 }

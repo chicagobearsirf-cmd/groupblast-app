@@ -14,6 +14,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { brand } from "@/lib/brand";
+import { installGlobalErrorReporter, reportAppError } from "@/lib/error-reporter";
 
 const PAGE_DESCRIPTION = `${brand.tagline} — posting dashboard.`;
 
@@ -44,6 +45,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    reportAppError("crash", error.message, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
   return (
@@ -147,7 +149,10 @@ function AuthGate({ children }: { children: ReactNode }) {
   const { status, mode } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const isAuthPage = location.pathname === "/login" || location.pathname === "/signup" || location.pathname === "/auth-callback";
+  const isAuthPage =
+    location.pathname === "/login" ||
+    location.pathname === "/signup" ||
+    location.pathname === "/auth-callback";
 
   useEffect(() => {
     if (mode !== "local" && status === "unauthenticated" && !isAuthPage) {
@@ -172,6 +177,8 @@ function AuthGate({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => installGlobalErrorReporter(), []);
 
   return (
     <QueryClientProvider client={queryClient}>
