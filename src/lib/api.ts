@@ -38,6 +38,9 @@ export class ApiError extends Error {
   method?: string;
   endpoint?: string;
   suggestion?: string;
+  code?: string;
+  blockCooldownUntil?: string;
+  blockCooldownReason?: string;
   chromeProfileDiagnostics?: ChromeProfileDiagnostics;
 }
 
@@ -120,6 +123,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         ({}) as {
           error?: string;
           suggestion?: string;
+          code?: string;
+          blockCooldownUntil?: string;
+          blockCooldownReason?: string;
           chromeProfileDiagnostics?: ChromeProfileDiagnostics;
         },
     );
@@ -130,6 +136,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     error.method = method;
     error.endpoint = path;
     error.suggestion = body.suggestion ?? suggestionForStatus(response.status, path);
+    error.code = body.code;
+    error.blockCooldownUntil = body.blockCooldownUntil;
+    error.blockCooldownReason = body.blockCooldownReason;
     error.chromeProfileDiagnostics = body.chromeProfileDiagnostics;
     recordApiError(error);
     throw error;
@@ -220,8 +229,11 @@ export const api = {
     ),
   cancelAllScheduledPosts: () =>
     post<{ canceled: number; summary: ScheduledQueueSummary }>("/api/scheduled-posts/cancel-all"),
-  sessionAction: (sessionId: string, action: SessionAction) =>
-    post<SessionStatus>(`/api/sessions/${sessionId}/${action}`),
+  sessionAction: (
+    sessionId: string,
+    action: SessionAction,
+    options: { overrideBlockCooldown?: boolean } = {},
+  ) => post<SessionStatus>(`/api/sessions/${sessionId}/${action}`, options),
   forceStop: () => post<SessionStatus>("/api/runner/force-stop"),
   sessionStatus: () => request<SessionStatus>("/api/session-status"),
   history: () => request<HistoryData>("/api/history"),

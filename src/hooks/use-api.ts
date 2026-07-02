@@ -92,12 +92,24 @@ export function useInvalidate() {
 export function useSessionAction(sessionId: string | undefined) {
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: ({ action }: { action: SessionAction; successMessage: string }) => {
+    mutationFn: ({
+      action,
+      overrideBlockCooldown,
+    }: {
+      action: SessionAction;
+      successMessage: string;
+      overrideBlockCooldown?: boolean;
+    }) => {
       if (!sessionId) return Promise.reject(new Error("No active session."));
-      return api.sessionAction(sessionId, action);
+      return api.sessionAction(sessionId, action, { overrideBlockCooldown });
     },
     onSuccess: async (_data, { successMessage }) => {
-      await invalidate(queryKeys.sessionStatus, queryKeys.history, queryKeys.groups);
+      await invalidate(
+        queryKeys.sessionStatus,
+        queryKeys.history,
+        queryKeys.groups,
+        queryKeys.settings,
+      );
       toast.success(successMessage);
     },
     onError: (error) => toast.error(error.message),

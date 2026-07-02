@@ -3,7 +3,7 @@ export type ResultStatus = "posted" | "skipped" | "failed" | "needs_review" | "p
 export type ScheduledPostStatus =
   "pending" | "processing" | "posted" | "failed" | "skipped" | "canceled";
 export type SessionState =
-  "draft" | "running" | "paused" | "stopped" | "completed" | "needs_review";
+  "draft" | "running" | "paused" | "stopped" | "completed" | "needs_review" | "blocked";
 export type FacebookSessionCheckStatus =
   "never_checked" | "logged_in" | "not_logged_in" | "checkpoint_or_review" | "unknown";
 export type BrowserMode = "managed_playwright_profile" | "imported_chrome_profile_snapshot";
@@ -97,6 +97,8 @@ export type AppSettings = {
   autoSubmitEnabled: boolean;
   facebookSessionStatus: FacebookSessionCheckStatus;
   facebookSessionCheckedAt: string | null;
+  blockCooldownUntil: string | null;
+  blockCooldownReason: string;
 };
 
 export type PostSession = {
@@ -149,7 +151,8 @@ export type ScheduledQueueSummary = {
 };
 
 export type RunnerDiagnostics = {
-  runnerStatus: "idle" | "running" | "paused" | "waiting_for_human" | "stopped" | "error";
+  runnerStatus:
+    "idle" | "running" | "paused" | "waiting_for_human" | "stopped" | "blocked" | "error";
   currentUrl: string;
   pageTitle: string;
   lastError: string;
@@ -159,6 +162,7 @@ export type RunnerDiagnostics = {
   lastSelectorAttemptSummary: string;
   lastWorkingSelector: string;
   lastDebugRecordPath: string;
+  blockCooldownUntil: string | null;
   updatedAt: string;
 };
 

@@ -119,7 +119,12 @@ function QueuePage() {
     );
   }
 
-  const act = (action: SessionAction, successMessage: string) => {
+  const cooldownUntil =
+    status.diagnostics.blockCooldownUntil ??
+    (settings as { blockCooldownUntil?: string | null } | undefined)?.blockCooldownUntil ??
+    null;
+  const cooldownActive = isFutureDate(cooldownUntil);
+  const act = (action: SessionAction, successMessage: string, overrideBlockCooldown = false) => {
     if (
       action === "start" &&
       settings?.facebookSessionStatus !== "logged_in" &&
@@ -127,7 +132,15 @@ function QueuePage() {
     ) {
       return;
     }
-    sessionAction.mutate({ action, successMessage });
+    if (
+      overrideBlockCooldown &&
+      !window.confirm(
+        "Posting before Facebook's limit is over can make the restriction last longer. Continue anyway?",
+      )
+    ) {
+      return;
+    }
+    sessionAction.mutate({ action, successMessage, overrideBlockCooldown });
   };
 
   const progressValue = status.totalCount
@@ -208,8 +221,16 @@ function QueuePage() {
             />
           </div>
 
+          {cooldownActive ? (
+            <BlockCooldownAlert
+              cooldownUntil={cooldownUntil}
+              isStarting={sessionAction.isPending}
+              onOverride={() => act("start", "Started despite the Facebook limit.", true)}
+            />
+          ) : null}
+
           {/* Primary controls — the buttons users press most */}
-          {status.session.state !== "running" && status.remainingCount > 0 ? (
+          {!cooldownActive && status.session.state !== "running" && status.remainingCount > 0 ? (
             <div className="flex flex-col items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/40 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200">
                 Ready to post to {status.remainingCount} group
@@ -225,7 +246,11 @@ function QueuePage() {
           ) : null}
 
           <div className="flex flex-wrap gap-2">
-            <Button className="h-11" onClick={() => act("start", "Started.")}>
+            <Button
+              className="h-11"
+              disabled={cooldownActive}
+              onClick={() => act("start", "Started.")}
+            >
               <Play className="mr-2 h-4 w-4" /> Start
             </Button>
             <Button className="h-11" variant="outline" onClick={() => act("pause", "Paused.")}>
@@ -384,6 +409,53 @@ function QueuePage() {
   );
 }
 
+function BlockCooldownAlert({
+  cooldownUntil,
+  isStarting,
+  onOverride,
+}: {
+  cooldownUntil: string | null;
+  isStarting: boolean;
+  onOverride: () => void;
+}) {
+  const until = cooldownUntil ? new Date(cooldownUntil) : null;
+  const untilLabel =
+    until && !Number.isNaN(until.getTime())
+      ? until.toLocaleString(undefined, {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        })
+      : "later";
+  const remainingLabel = formatTimeRemaining(cooldownUntil);
+  return (
+    <Alert className="border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+      <ShieldAlert className="h-4 w-4" />
+      <AlertTitle>Facebook has temporarily limited posting</AlertTitle>
+      <AlertDescription className="flex flex-col gap-3">
+        <p>
+          GroupBlast paused everything to protect your account. You can post again after{" "}
+          <strong>{untilLabel}</strong>
+          {remainingLabel ? ` (${remainingLabel})` : ""}. Posting sooner risks a longer restriction.
+        </p>
+        <div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-amber-700 bg-white text-amber-950 hover:bg-amber-100 dark:bg-transparent dark:text-amber-100"
+            disabled={isStarting}
+            onClick={onOverride}
+          >
+            I understand the risk, post anyway
+          </Button>
+        </div>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 function ScheduledPostsPanel({
   posts,
   isLoading,
@@ -511,4 +583,22 @@ function formatScheduledTime(value: string) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function isFutureDate(value: string | null) {
+  if (!value) return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.getTime() > Date.now();
+}
+
+function formatTimeRemaining(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const totalMinutes = Math.max(0, Math.ceil((date.getTime() - Date.now()) / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours <= 0) return `${minutes} min left`;
+  if (minutes === 0) return `${hours} hr left`;
+  return `${hours} hr ${minutes} min left`;
 }

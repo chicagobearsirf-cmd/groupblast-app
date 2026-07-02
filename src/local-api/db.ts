@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { getBlockCooldownStatus } from "./block-detection";
 import type {
   AppSettings,
   FacebookGroup,
@@ -94,6 +95,8 @@ const defaultSettings: AppSettings = {
   autoSubmitEnabled: true,
   facebookSessionStatus: "never_checked",
   facebookSessionCheckedAt: null,
+  blockCooldownUntil: null,
+  blockCooldownReason: "",
 };
 
 db.exec(`
@@ -276,6 +279,13 @@ const normalizeSettings = (settings: AppSettings): AppSettings => {
   settings.browserProfilePath = expandHome(settings.browserProfilePath);
   settings.chromeUserDataDir = expandHome(settings.chromeUserDataDir);
   settings.chromeExecutablePath = expandHome(settings.chromeExecutablePath);
+  if (
+    settings.blockCooldownUntil &&
+    Number.isNaN(new Date(settings.blockCooldownUntil).getTime())
+  ) {
+    settings.blockCooldownUntil = null;
+  }
+  settings.blockCooldownReason = settings.blockCooldownReason ?? "";
   const userDataDir = resolve(settings.chromeUserDataDir || ".");
   if (userDataDir === legacyAutomationCopyDir || userDataDir === snapshotLaunchDir) {
     settings.chromeUserDataDir = expandHome(defaultSettings.chromeUserDataDir);
@@ -478,6 +488,29 @@ export const storage = {
       "insert into settings (key, value) values ('app', ?) on conflict(key) do update set value = excluded.value",
     ).run(encode(settings));
     return settings;
+  },
+  getActiveBlockCooldown(currentTime = new Date()) {
+    const settings = this.getSettings();
+    const cooldown = getBlockCooldownStatus(
+      settings.blockCooldownUntil,
+      settings.blockCooldownReason,
+      currentTime,
+    );
+    if (!cooldown && settings.blockCooldownUntil) {
+      this.updateSettings({ blockCooldownUntil: null, blockCooldownReason: "" });
+      return null;
+    }
+    return cooldown;
+  },
+  startBlockCooldown(reason: string, currentTime = new Date()) {
+    const until = new Date(currentTime.getTime() + 48 * 60 * 60 * 1000).toISOString();
+    return this.updateSettings({
+      blockCooldownUntil: until,
+      blockCooldownReason: reason,
+    });
+  },
+  clearBlockCooldown() {
+    return this.updateSettings({ blockCooldownUntil: null, blockCooldownReason: "" });
   },
   createSession(postText: string, selectedGroupIds: string[]) {
     const timestamp = now();

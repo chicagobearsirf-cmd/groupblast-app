@@ -179,6 +179,7 @@ export class ScheduledPostDispatcher {
     this.busy = true;
     try {
       const settings = storage.getSettings();
+      if (storage.getActiveBlockCooldown()) return;
       const { startIso, endIso } = localDayIsoRange(new Date());
       if (storage.postedResultsBetween(startIso, endIso) >= readDailyCap(settings)) {
         this.rescheduleOverduePendingPosts(
@@ -205,6 +206,14 @@ export class ScheduledPostDispatcher {
       storage.updateScheduledPost(item.id, { createdSessionId: session.id, lastError: "" });
       await runner.start(session.id);
       await this.waitForSession(session.id, item.id);
+      const sessionAfterRun = storage.getSession(session.id);
+      if (sessionAfterRun?.state === "blocked") {
+        storage.updateScheduledPost(item.id, {
+          status: "pending",
+          lastError: "Facebook has temporarily limited posting. This post will wait.",
+        });
+        return;
+      }
       const result = storage.resultForGroup(session.id, item.groupId);
       if (result?.status === "posted") {
         storage.updateScheduledPost(item.id, {
@@ -225,6 +234,13 @@ export class ScheduledPostDispatcher {
       const message = result?.message || `Posting ended as ${result?.status ?? "stopped"}.`;
       this.failOrRetry(item.id, message);
     } catch (error) {
+      if (storage.getActiveBlockCooldown()) {
+        storage.updateScheduledPost(item.id, {
+          status: "pending",
+          lastError: "Facebook has temporarily limited posting. This post will wait.",
+        });
+        return;
+      }
       this.failOrRetry(item.id, error instanceof Error ? error.message : "Scheduled post failed.");
     }
   }
@@ -237,7 +253,7 @@ export class ScheduledPostDispatcher {
         return;
       }
       const session = storage.getSession(sessionId);
-      if (!session || ["completed", "stopped"].includes(session.state)) return;
+      if (!session || ["blocked", "completed", "stopped"].includes(session.state)) return;
       await delay(WAIT_POLL_MS);
     }
   }

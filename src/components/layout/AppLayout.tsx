@@ -10,7 +10,7 @@ import { TourOverlay } from "@/components/onboarding/TourOverlay";
 import { AutomationGuard } from "@/components/automation/AutomationGuard";
 import { BrandMark } from "@/components/layout/BrandMark";
 import { Badge } from "@/components/ui/badge";
-import { useScheduledSummary } from "@/hooks/use-api";
+import { useScheduledSummary, useSettings } from "@/hooks/use-api";
 
 function GettingStartedButton() {
   const { start } = useTour();
@@ -24,6 +24,21 @@ function GettingStartedButton() {
 
 function ScheduledQueueChip() {
   const { data: summary } = useScheduledSummary();
+  const { data: settings } = useSettings();
+  const cooldownUntil = (settings as { blockCooldownUntil?: string | null } | undefined)
+    ?.blockCooldownUntil;
+  const cooldownDate = cooldownUntil ? new Date(cooldownUntil) : null;
+  if (cooldownDate && !Number.isNaN(cooldownDate.getTime()) && cooldownDate > new Date()) {
+    return (
+      <Badge
+        variant="outline"
+        className="hidden border-amber-300 bg-amber-50 text-amber-900 sm:inline-flex"
+      >
+        Posting paused until{" "}
+        {cooldownDate.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+      </Badge>
+    );
+  }
   if (!summary?.activeCount) return null;
   const next = summary.nextScheduledFor ? new Date(summary.nextScheduledFor) : null;
   const nextLabel =
