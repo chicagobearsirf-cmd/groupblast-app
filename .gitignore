@@ -42,3 +42,4 @@ data/
 dist-electron/
 build/icon-square.png
 pw-browsers/
+supabase/.temp/

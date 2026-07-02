@@ -58,10 +58,16 @@ Deno.serve(async (req) => {
 
   const { data: entitlement } = await admin
     .from("ai_entitlements")
-    .select("addon_active, monthly_generation_cap, monthly_premium_cap")
+    .select("addon_active, monthly_generation_cap, monthly_premium_cap, trial_started_at")
     .eq("user_id", user.id)
     .maybeSingle();
-  if (!entitlement?.addon_active) return json(403, { error: "no_addon" });
+
+  const trialActive =
+    Boolean(entitlement?.trial_started_at) &&
+    Date.now() - new Date(entitlement!.trial_started_at as string).getTime() < 24 * 60 * 60 * 1000;
+  if (!entitlement || (!entitlement.addon_active && !trialActive)) {
+    return json(403, { error: "no_addon" });
+  }
 
   let body: RequestBody;
   try {

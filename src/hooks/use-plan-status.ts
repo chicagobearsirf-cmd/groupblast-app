@@ -11,6 +11,11 @@ type PlanStatusState = {
   trialEndsAt: string | null;
   daysRemaining: number;
   aiAccess: boolean;
+  aiTrialActive: boolean;
+  aiTrialUsed: boolean;
+  aiTrialEndsAt: string | null;
+  aiDiscountCode: string | null;
+  aiDiscountCents: number;
   isLoading: boolean;
   promoCode: string | null;
   discountPercent: number;
@@ -23,6 +28,11 @@ const localAccess: PlanStatusState = {
   trialEndsAt: null,
   daysRemaining: 0,
   aiAccess: false,
+  aiTrialActive: false,
+  aiTrialUsed: false,
+  aiTrialEndsAt: null,
+  aiDiscountCode: null,
+  aiDiscountCents: 0,
   isLoading: false,
   promoCode: null,
   discountPercent: 0,
@@ -35,6 +45,11 @@ const loadingState: PlanStatusState = {
   trialEndsAt: null,
   daysRemaining: 0,
   aiAccess: false,
+  aiTrialActive: false,
+  aiTrialUsed: false,
+  aiTrialEndsAt: null,
+  aiDiscountCode: null,
+  aiDiscountCents: 0,
   isLoading: true,
   promoCode: null,
   discountPercent: 0,
@@ -47,6 +62,11 @@ type PlanStatusRpc = {
   trial_ends_at?: string | null;
   days_remaining?: number;
   ai_access?: boolean;
+  ai_trial_active?: boolean;
+  ai_trial_used?: boolean;
+  ai_trial_ends_at?: string | null;
+  ai_discount_code?: string | null;
+  ai_discount_cents?: number;
   promo_code?: string | null;
   discount_percent?: number;
 };
@@ -70,6 +90,7 @@ async function getDeviceId(): Promise<string | null> {
 
 export function usePlanStatus(): PlanStatusState & {
   applyPromoCode: (code: string) => Promise<ApplyPromoCodeResult>;
+  refresh: () => Promise<void>;
 } {
   const { mode, status: authStatus, user } = useAuth();
   const [state, setState] = useState<PlanStatusState>(
@@ -87,19 +108,15 @@ export function usePlanStatus(): PlanStatusState & {
       return;
     }
 
+    const expiredFallback: PlanStatusState = {
+      ...loadingState,
+      status: "expired",
+      isLoading: false,
+    };
+
     const client = getSupabaseClient();
     if (!client) {
-      setState({
-        status: "expired",
-        hasAccess: false,
-        isPilot: false,
-        trialEndsAt: null,
-        daysRemaining: 0,
-        aiAccess: false,
-        isLoading: false,
-        promoCode: null,
-        discountPercent: 0,
-      });
+      setState(expiredFallback);
       return;
     }
 
@@ -110,17 +127,7 @@ export function usePlanStatus(): PlanStatusState & {
       p_device_id: deviceId,
     });
     if (error) {
-      setState({
-        status: "expired",
-        hasAccess: false,
-        isPilot: false,
-        trialEndsAt: null,
-        daysRemaining: 0,
-        aiAccess: false,
-        isLoading: false,
-        promoCode: null,
-        discountPercent: 0,
-      });
+      setState(expiredFallback);
       return;
     }
 
@@ -140,6 +147,11 @@ export function usePlanStatus(): PlanStatusState & {
       trialEndsAt: payload.trial_ends_at ?? null,
       daysRemaining: Number(payload.days_remaining ?? 0),
       aiAccess: Boolean(payload.ai_access),
+      aiTrialActive: Boolean(payload.ai_trial_active),
+      aiTrialUsed: Boolean(payload.ai_trial_used),
+      aiTrialEndsAt: payload.ai_trial_ends_at ?? null,
+      aiDiscountCode: payload.ai_discount_code ?? null,
+      aiDiscountCents: Number(payload.ai_discount_cents ?? 0),
       isLoading: false,
       promoCode: payload.promo_code ?? null,
       discountPercent: Number(payload.discount_percent ?? 0),
@@ -179,5 +191,5 @@ export function usePlanStatus(): PlanStatusState & {
     [mode, user?.id, refresh],
   );
 
-  return { ...state, applyPromoCode };
+  return { ...state, applyPromoCode, refresh };
 }

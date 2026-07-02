@@ -177,7 +177,54 @@ const friendlyErrors: Record<string, string> = {
   premium_cap_reached: "You've used all of this month's HD renders. They reset on the 1st.",
   profile_incomplete: "Finish your business profile first so posts sound like you.",
   not_authenticated: "Please sign in again.",
+  no_base_access: "Your trial or subscription needs to be active to start this trial.",
+  trial_already_used: "You've already used your one-day free trial.",
+  already_active: "The add-on is already active on this account.",
+  invalid_code: "That code isn't valid.",
 };
+
+export function useStartAiTrial() {
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (): Promise<{ trialEndsAt: string }> => {
+      const client = getSupabaseClient();
+      if (!client || !user?.id) throw new Error(friendlyErrors.not_authenticated);
+      const { data, error } = await client.rpc("start_ai_trial", { p_user_id: user.id });
+      if (error) throw new Error(error.message);
+      const result = (data ?? {}) as { ok?: boolean; trial_ends_at?: string; error?: string };
+      if (!result.ok) {
+        throw new Error(
+          friendlyErrors[result.error ?? ""] ?? "Couldn't start the trial — please try again.",
+        );
+      }
+      return { trialEndsAt: result.trial_ends_at as string };
+    },
+  });
+}
+
+export function useApplyAiPromoCode() {
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (code: string): Promise<{ discountCents: number }> => {
+      const client = getSupabaseClient();
+      if (!client || !user?.id) throw new Error(friendlyErrors.not_authenticated);
+      const { data, error } = await client.rpc("apply_ai_promo_code", {
+        p_user_id: user.id,
+        p_code: code,
+      });
+      if (error) throw new Error(error.message);
+      const result = (data ?? {}) as {
+        ok?: boolean;
+        discount_amount_cents?: number;
+        error?: string;
+      };
+      if (!result.ok) {
+        throw new Error(friendlyErrors[result.error ?? ""] ?? "That code isn't valid.");
+      }
+      return { discountCents: Number(result.discount_amount_cents ?? 0) };
+    },
+  });
+}
 
 export function useGenerateContent() {
   const queryClient = useQueryClient();

@@ -10,6 +10,7 @@ import { useAuth } from "@/components/auth/auth-context";
 import { usePlanStatus } from "@/hooks/use-plan-status";
 import {
   emptyProfile,
+  useApplyAiPromoCode,
   useBusinessProfile,
   useContentDrafts,
   useContentUsage,
@@ -17,6 +18,7 @@ import {
   useGenerateContent,
   useSaveBusinessProfile,
   useSaveDraft,
+  useStartAiTrial,
   type BusinessProfile,
   type ContentDraft,
 } from "@/hooks/use-automated-content";
@@ -26,10 +28,11 @@ export const Route = createFileRoute("/content")({
 });
 
 const GOALS = ["Promo / special offer", "Get my name out there", "Event", "Customer story"];
+const STICKER_PRICE = 60;
 
 function ContentPage() {
   const { mode } = useAuth();
-  const { aiAccess, isLoading: planLoading } = usePlanStatus();
+  const plan = usePlanStatus();
   const { data: profile, isLoading: profileLoading } = useBusinessProfile();
 
   if (mode === "local") {
@@ -44,7 +47,7 @@ function ContentPage() {
     );
   }
 
-  if (planLoading || profileLoading) {
+  if (plan.isLoading || profileLoading) {
     return (
       <PageShell>
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -52,9 +55,9 @@ function ContentPage() {
     );
   }
 
-  if (!aiAccess) return <UpsellCard />;
+  if (!plan.aiAccess) return <UpsellCard plan={plan} />;
   if (!profile?.completed) return <ProfileWizard initial={profile ?? emptyProfile} />;
-  return <Generator />;
+  return <Generator trialActive={plan.aiTrialActive} trialEndsAt={plan.aiTrialEndsAt} />;
 }
 
 function PageShell({ children }: { children: React.ReactNode }) {
@@ -73,16 +76,59 @@ function PageShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function UpsellCard() {
+function UpsellCard({ plan }: { plan: ReturnType<typeof usePlanStatus> }) {
+  const applyCode = useApplyAiPromoCode();
+  const startTrial = useStartAiTrial();
+  const [code, setCode] = useState("");
+  const [codeFeedback, setCodeFeedback] = useState<string | null>(null);
+
+  const price = plan.aiDiscountCents
+    ? (STICKER_PRICE - plan.aiDiscountCents / 100).toFixed(2)
+    : STICKER_PRICE.toFixed(2);
+  const hasDiscount = plan.aiDiscountCents > 0;
+
   const subject = encodeURIComponent("Add Automated Content to my GroupBlast account");
-  const body = encodeURIComponent(
-    "Hi! I'd like to add Automated Content ($60/mo) to my account.\n\nMy account email: ",
-  );
+  const bodyLines = [
+    `Hi! I'd like to add Automated Content ($${price}/mo${hasDiscount ? `, code ${plan.aiDiscountCode}` : ""}) to my account.`,
+    "",
+    "My account email: ",
+  ];
+  const body = encodeURIComponent(bodyLines.join("\n"));
+
+  const onApplyCode = () => {
+    if (!code.trim()) return;
+    setCodeFeedback(null);
+    applyCode.mutate(code, {
+      onSuccess: async (result) => {
+        setCodeFeedback(`Code applied — $${(STICKER_PRICE - result.discountCents / 100).toFixed(2)}/mo.`);
+        await plan.refresh();
+      },
+      onError: (error) => setCodeFeedback(error.message),
+    });
+  };
+
+  const onStartTrial = () => {
+    startTrial.mutate(undefined, {
+      onSuccess: async () => {
+        toast.success("Free day started — try it out!");
+        await plan.refresh();
+      },
+      onError: (error) => toast.error(error.message),
+    });
+  };
+
   return (
     <PageShell>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Add Automated Content — $60/month</CardTitle>
+          <CardTitle className="text-base">
+            Add Automated Content — ${price}/month
+            {hasDiscount ? (
+              <span className="ml-2 text-sm font-normal text-muted-foreground line-through">
+                ${STICKER_PRICE}
+              </span>
+            ) : null}
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
           <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
@@ -91,11 +137,52 @@ function UpsellCard() {
             <li>100 posts with pictures every month, plus HD renders for your big ones.</li>
             <li>Save drafts and drop them straight into New Post.</li>
           </ul>
+
           <Button asChild className="h-11 w-fit">
             <a href={`mailto:guysadwise@gmail.com?subject=${subject}&body=${body}`}>
-              Email to activate — $60/mo
+              Email to activate — ${price}/mo
             </a>
           </Button>
+
+          {plan.aiTrialUsed ? (
+            <p className="text-xs text-muted-foreground">
+              Your free one-day trial has already been used on this account.
+            </p>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={startTrial.isPending}
+                onClick={onStartTrial}
+              >
+                {startTrial.isPending ? "Starting…" : "Try it free for one day"}
+              </Button>
+              <p className="text-xs text-muted-foreground">No card, no signup — just try it.</p>
+            </div>
+          )}
+
+          <div className="mt-1 flex flex-col gap-1.5 border-t pt-3">
+            <p className="text-xs text-muted-foreground">Have a discount code?</p>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Discount code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                disabled={applyCode.isPending}
+                className="max-w-[200px]"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={applyCode.isPending || !code.trim()}
+                onClick={onApplyCode}
+              >
+                Apply
+              </Button>
+            </div>
+            {codeFeedback ? <p className="text-xs text-muted-foreground">{codeFeedback}</p> : null}
+          </div>
         </CardContent>
       </Card>
     </PageShell>
@@ -316,7 +403,33 @@ function ProfileWizard({ initial }: { initial: BusinessProfile }) {
 
 // ---------- Generator ----------
 
-function Generator() {
+function TrialCountdownBanner({ trialEndsAt }: { trialEndsAt: string | null }) {
+  if (!trialEndsAt) return null;
+  const msRemaining = new Date(trialEndsAt).getTime() - Date.now();
+  const hoursRemaining = Math.max(0, Math.ceil(msRemaining / (60 * 60 * 1000)));
+  const subject = encodeURIComponent("Add Automated Content to my GroupBlast account");
+  return (
+    <div className="flex items-center justify-between rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+      <span>
+        Free trial — about {hoursRemaining} hour{hoursRemaining === 1 ? "" : "s"} left.
+      </span>
+      <a
+        href={`mailto:guysadwise@gmail.com?subject=${subject}`}
+        className="font-medium underline"
+      >
+        Keep it — $60/mo
+      </a>
+    </div>
+  );
+}
+
+function Generator({
+  trialActive,
+  trialEndsAt,
+}: {
+  trialActive: boolean;
+  trialEndsAt: string | null;
+}) {
   const navigate = useNavigate();
   const generate = useGenerateContent();
   const saveDraft = useSaveDraft();
@@ -380,6 +493,7 @@ function Generator() {
 
   return (
     <PageShell>
+      {trialActive ? <TrialCountdownBanner trialEndsAt={trialEndsAt} /> : null}
       {usage ? (
         <p className="text-xs text-muted-foreground">
           {usage.gensUsed} of 100 posts used this month · {usage.premiumUsed} of 15 HD renders
