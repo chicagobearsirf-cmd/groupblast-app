@@ -296,6 +296,7 @@ class HumanReviewRunner {
     assertFacebookGroupUrl(group.url);
     await this.ensurePage();
     await this.page?.goto(group.url, { waitUntil: "domcontentloaded", timeout: 60000 });
+    if (this.page) await this.dismissBlockingDialogs(this.page);
   }
 
   // Re-attempt the current group from scratch (re-navigate + re-fill the composer)
@@ -764,7 +765,15 @@ class HumanReviewRunner {
         await this.advance(session);
         return;
       }
-      const filled = await this.fillComposer(this.page!, session.postText);
+      let filled = await this.fillComposer(this.page!, session.postText);
+      if (!filled) {
+        // A pop-up (group rules, "suggested for you", invite prompt…) may have
+        // appeared AFTER the first dismiss pass and be covering the composer.
+        // Dismiss again and retry once before recording a failure.
+        await this.dismissBlockingDialogs(this.page!);
+        await delay(1000);
+        filled = await this.fillComposer(this.page!, session.postText);
+      }
       if (!filled) {
         this.consecutiveComposerFailures += 1;
         this.record(session, group, "needs_review", "composer_not_found");
