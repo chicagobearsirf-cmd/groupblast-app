@@ -59,8 +59,10 @@ jobs:
       - name: Vite build
         run: npm run build
 
+      # --publish never: electron-builder auto-publishes when it detects CI,
+      # which double-drives the upload; the gh release upload step below owns it.
       - name: Build NSIS installer
-        run: npx electron-builder --win
+        run: npx electron-builder --win --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
