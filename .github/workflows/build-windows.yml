@@ -51,6 +51,14 @@ jobs:
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}\pw-browsers
 
+      # Per the verified build ritual: rebuild better-sqlite3 against Electron's
+      # ABI (skipping this causes ERR_DLOPEN_FAILED in the packaged app).
+      - name: Rebuild native modules for Electron
+        run: npx @electron/rebuild -f -w better-sqlite3
+
+      - name: Vite build
+        run: npm run build
+
       - name: Build NSIS installer
         run: npx electron-builder --win
         env:
