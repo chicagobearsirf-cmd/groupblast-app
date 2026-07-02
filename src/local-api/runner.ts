@@ -725,6 +725,18 @@ class HumanReviewRunner {
         await delay(750);
         continue;
       }
+      const capSettings = storage.getSettings();
+      if (storage.countPostedInLast24Hours() >= capSettings.maxPostsPerDay) {
+        this.stopped = true;
+        this.activeSessionId = null;
+        storage.updateSession(sessionId, { state: "paused" });
+        this.setDiagnostics({
+          runnerStatus: "stopped",
+          lastError: `Daily limit reached: ${capSettings.maxPostsPerDay} posts in the last 24 hours. GroupBlast stopped to protect your Facebook account. Start this queue again tomorrow to continue where you left off.`,
+          lastDetectedState: "daily_limit_reached",
+        });
+        return;
+      }
       const group = storage.getGroup(session.selectedGroupIds[session.currentIndex]);
       if (!group || group.status === "removed" || group.status === "paused") {
         if (group) this.record(session, group, "skipped", "Group is paused or removed.");

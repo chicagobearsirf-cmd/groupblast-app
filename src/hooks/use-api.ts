@@ -9,6 +9,8 @@ export const queryKeys = {
   collections: ["collections"] as const,
   settings: ["settings"] as const,
   sessionStatus: ["session-status"] as const,
+  scheduledPosts: ["scheduled-posts"] as const,
+  scheduledSummary: ["scheduled-summary"] as const,
   history: ["history"] as const,
   extensionInfo: ["extension-info"] as const,
 };
@@ -32,6 +34,22 @@ export function useSessionStatus(options: { poll?: boolean } = {}) {
     queryKey: queryKeys.sessionStatus,
     queryFn: api.sessionStatus,
     refetchInterval: options.poll === false ? false : 2500,
+  });
+}
+
+export function useScheduledPosts(options: { poll?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.scheduledPosts,
+    queryFn: api.scheduledPosts,
+    refetchInterval: options.poll === false ? false : 5000,
+  });
+}
+
+export function useScheduledSummary(options: { poll?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.scheduledSummary,
+    queryFn: api.scheduledSummary,
+    refetchInterval: options.poll === false ? false : 5000,
   });
 }
 
@@ -93,6 +111,32 @@ export function useForceStop() {
     onSuccess: async () => {
       await invalidate(queryKeys.sessionStatus, queryKeys.history, queryKeys.groups);
       toast.success("Runner reset. You can start a new queue now.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+}
+
+export function useCancelScheduledPost() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (id: string) => api.cancelScheduledPost(id),
+    onSuccess: async () => {
+      await invalidate(queryKeys.scheduledPosts, queryKeys.scheduledSummary);
+      toast.success("Scheduled post canceled.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+}
+
+export function useCancelAllScheduledPosts() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: () => api.cancelAllScheduledPosts(),
+    onSuccess: async (result) => {
+      await invalidate(queryKeys.scheduledPosts, queryKeys.scheduledSummary);
+      toast.success(
+        `${result.canceled} scheduled post${result.canceled === 1 ? "" : "s"} canceled.`,
+      );
     },
     onError: (error) => toast.error(error.message),
   });
