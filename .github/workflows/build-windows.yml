@@ -1,0 +1,84 @@
+name: Build Windows installer
+
+on:
+  push:
+    branches: [release/win-build]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to upload the installer to
+        default: v0.1.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # npm 11 (Node 24+) resolves this lockfile; npm 10 fails on an
+          # optional peer (lru-cache@11) that isn't pinned in the lock.
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The packaged app reads .env.local at runtime (brand + Supabase config).
+      # Set once with: gh secret set ENV_LOCAL < .env.local
+      # The guard stops the build rather than shipping a misconfigured exe.
+      - name: Write .env.local
+        shell: bash
+        run: |
+          if [ -z "$ENV_LOCAL" ]; then
+            echo "ENV_LOCAL secret is not set — refusing to build a misconfigured installer."
+            echo "Run: gh secret set ENV_LOCAL < .env.local"
+            exit 1
+          fi
+          printf '%s' "$ENV_LOCAL" > .env.local
+        env:
+          ENV_LOCAL: ${{ secrets.ENV_LOCAL }}
+
+      # Bundle Chromium into pw-browsers/ so fresh machines don't need
+      # `playwright install` (see AUDIT.md blocker #3).
+      - name: Install Playwright Chromium into pw-browsers
+        run: npx playwright install chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}\pw-browsers
+
+      # Per the verified build ritual: rebuild better-sqlite3 against Electron's
+      # ABI (skipping this causes ERR_DLOPEN_FAILED in the packaged app).
+      - name: Rebuild native modules for Electron
+        run: npx @electron/rebuild -f -w better-sqlite3
+
+      - name: Vite build
+        run: npm run build
+
+      # --publish never: electron-builder auto-publishes when it detects CI,
+      # which double-drives the upload; the gh release upload step below owns it.
+      - name: Build NSIS installer
+        run: npx electron-builder --win --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Sanity-check installer contents
+        shell: bash
+        run: |
+          ls -lh dist-electron/*.exe
+          size=$(stat -c%s dist-electron/*.exe)
+          if [ "$size" -lt 300000000 ]; then
+            echo "Installer is only $size bytes — Chromium bundle is likely missing. Failing."
+            exit 1
+          fi
+
+      - name: Upload installer to release
+        shell: bash
+        run: gh release upload "$TAG" dist-electron/*.exe --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.release_tag || 'v0.1.0' }}
