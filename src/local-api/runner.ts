@@ -4,6 +4,11 @@ import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { assertFacebookGroupUrl, delay, storage, timestamp } from "./db";
 import {
+  detectFacebookBlockSignal,
+  suspectedFacebookBlockSignal,
+  type FacebookBlockDetection,
+} from "./block-detection";
+import {
   facebookSelectors,
   judgeComposerEditor,
   judgeComposerOpener,
@@ -66,11 +71,7 @@ const defaultChromeExecutablePaths = (
 ).filter(Boolean);
 // App-owned launch target for Imported Chrome Profile Snapshot mode. The app only
 // ever launches Playwright against this copy — never against a live Chrome profile.
-const snapshotUserDataDir = resolve(
-  dataDir,
-  "browser-profiles",
-  "imported-facebook-profile",
-);
+const snapshotUserDataDir = resolve(dataDir, "browser-profiles", "imported-facebook-profile");
 // Chrome 136+ refuses remote debugging (which Playwright requires) when launched with
 // the live default user data directory. Pointing the app at one of these paths can
 // never work on a current Chrome, so we detect it and steer the user to a copy.
@@ -129,6 +130,7 @@ const emptyDiagnostics = (): RunnerDiagnostics => ({
   lastSelectorAttemptSummary: "",
   lastWorkingSelector: "",
   lastDebugRecordPath: "",
+  blockCooldownUntil: null,
   updatedAt: timestamp(),
 });
 
@@ -150,8 +152,10 @@ class HumanReviewRunner {
   private paused = false;
   private stopped = false;
   private waitingForHuman = false;
+  private blocked = false;
   private groupStartedAt = 0;
   private consecutiveComposerFailures = 0;
+  private consecutivePostFailures = 0;
   private diagnostics = emptyDiagnostics();
   private joinedGroupsSync = emptyJoinedGroupsSyncStatus();
   private joinedGroupsSyncStopRequested = false;
@@ -180,7 +184,22 @@ class HumanReviewRunner {
     };
   }
 
-  async start(sessionId: string) {
+  async start(sessionId: string, options: { ignoreBlockCooldown?: boolean } = {}) {
+    const cooldown = storage.getActiveBlockCooldown();
+    if (cooldown && !options.ignoreBlockCooldown) {
+      this.blocked = true;
+      this.setDiagnostics({
+        runnerStatus: "blocked",
+        lastError: cooldown.reason || "facebook_posting_limited",
+        lastDetectedState: "facebook_block_cooldown_active",
+        blockCooldownUntil: cooldown.until,
+      });
+      throw new Error("Facebook has temporarily limited posting for this account.");
+    }
+    if (options.ignoreBlockCooldown) {
+      storage.clearBlockCooldown();
+      this.blocked = false;
+    }
     const session = storage.getSession(sessionId);
     if (!session) throw new Error("Session not found.");
     if (this.activeSessionId && this.activeSessionId !== sessionId) {
@@ -201,10 +220,12 @@ class HumanReviewRunner {
     this.activeSessionId = sessionId;
     this.stopped = false;
     this.paused = false;
+    this.blocked = false;
     // Reset waitingForHuman too — a leftover `true` from a prior halted session
     // would make this fresh loop immediately busy-wait and never post.
     this.waitingForHuman = false;
     this.consecutiveComposerFailures = 0;
+    this.consecutivePostFailures = 0;
     this.setDiagnostics({ runnerStatus: "running", lastError: "", lastDetectedState: "started" });
     storage.updateSession(sessionId, {
       state: "running",
@@ -227,6 +248,7 @@ class HumanReviewRunner {
 
   stop() {
     this.stopped = true;
+    this.blocked = false;
     this.setDiagnostics({ runnerStatus: "stopped", lastDetectedState: "stopped" });
     if (this.activeSessionId)
       storage.updateSession(this.activeSessionId, { state: "stopped", completedAt: timestamp() });
@@ -241,7 +263,9 @@ class HumanReviewRunner {
     this.stopped = true;
     this.paused = false;
     this.waitingForHuman = false;
+    this.blocked = false;
     this.consecutiveComposerFailures = 0;
+    this.consecutivePostFailures = 0;
     const lingering = this.activeSessionId;
     this.activeSessionId = null;
     if (lingering) {
@@ -322,7 +346,9 @@ class HumanReviewRunner {
     });
     this.waitingForHuman = false;
     this.paused = false;
+    this.blocked = false;
     this.consecutiveComposerFailures = 0;
+    this.consecutivePostFailures = 0;
     this.setDiagnostics({ runnerStatus: "running", lastError: "", lastDetectedState: "retry" });
 
     // If the loop already exited (session completed or stopped), restart it.
@@ -755,6 +781,11 @@ class HumanReviewRunner {
       await this.page!.goto(group.url, { waitUntil: "domcontentloaded", timeout: 60000 });
       await delay(1500);
       await this.dismissBlockingDialogs(this.page!);
+      const visibleBlock = await this.detectVisibleFacebookBlock(this.page!);
+      if (visibleBlock) {
+        await this.stopForBlock(session, group, visibleBlock);
+        return;
+      }
       const settings = storage.getSettings();
       const failure = await this.detectFailureState(this.page!);
       if (failure) {
@@ -794,6 +825,11 @@ class HumanReviewRunner {
           lastDetectedState: `composer_not_found_${this.consecutiveComposerFailures}`,
         });
         await this.saveDebugArtifacts(session, group, "composer_not_found");
+        const suspectedBlock = this.notePostFailure();
+        if (suspectedBlock) {
+          await this.stopForBlock(session, group, suspectedBlock);
+          return;
+        }
         if (this.consecutiveComposerFailures >= 3 && settings.stopOnRepeatedFailures) {
           this.pauseForReview(session, "Paused after 3 consecutive composer_not_found failures.");
           return;
@@ -818,7 +854,13 @@ class HumanReviewRunner {
 
       // Auto-submit mode: click Post and judge the outcome by what Facebook does.
       const outcome = await this.submitComposer(this.page!);
+      const postSubmitBlock = await this.detectVisibleFacebookBlock(this.page!);
+      if (postSubmitBlock) {
+        await this.stopForBlock(session, group, postSubmitBlock);
+        return;
+      }
       if (outcome === "submitted") {
+        this.resetPostFailures();
         this.record(session, group, "posted", "Auto-submitted.");
         this.setDiagnostics({
           runnerStatus: "running",
@@ -826,6 +868,7 @@ class HumanReviewRunner {
           lastDetectedState: "auto_posted",
         });
       } else if (outcome === "pending_admin") {
+        this.resetPostFailures();
         this.record(session, group, "needs_review", "admin_approval_required");
         const confirmationText = await this.gatherApprovalEvidence();
         await this.saveDebugArtifacts(session, group, "admin_approval_required", {
@@ -845,6 +888,11 @@ class HumanReviewRunner {
         await this.saveDebugArtifacts(session, group, "auto_submit_failed", {
           submitAttempted: true,
         });
+        const suspectedBlock = this.notePostFailure();
+        if (suspectedBlock) {
+          await this.stopForBlock(session, group, suspectedBlock);
+          return;
+        }
         this.setDiagnostics({
           runnerStatus: "running",
           lastError: "auto_submit_failed",
@@ -854,9 +902,22 @@ class HumanReviewRunner {
       await this.advance(session);
       return;
     } catch (error) {
+      const visibleBlock =
+        this.page && !this.page.isClosed()
+          ? await this.detectVisibleFacebookBlock(this.page)
+          : null;
+      if (visibleBlock) {
+        await this.stopForBlock(session, group, visibleBlock);
+        return;
+      }
       const message = error instanceof Error ? error.message : "unknown_error";
       this.record(session, group, "failed", message);
       await this.saveDebugArtifacts(session, group, message);
+      const suspectedBlock = this.notePostFailure();
+      if (suspectedBlock) {
+        await this.stopForBlock(session, group, suspectedBlock);
+        return;
+      }
       this.setDiagnostics({
         runnerStatus: "error",
         lastError: message,
@@ -1243,6 +1304,73 @@ class HumanReviewRunner {
     if (body.includes("content isn't available") || body.includes("this content isn't available"))
       return "group_unavailable";
     return null;
+  }
+
+  private async detectVisibleFacebookBlock(page: Page): Promise<FacebookBlockDetection> {
+    const selectors = [
+      'div[role="dialog"]',
+      'div[role="alert"]',
+      "div[aria-live]",
+      '[data-pagelet*="Toast"]',
+      "body",
+    ];
+    const chunks: string[] = [];
+    for (const selector of selectors) {
+      const texts = await page
+        .locator(selector)
+        .evaluateAll((elements) =>
+          elements
+            .map((element) => (element as HTMLElement).innerText || element.textContent || "")
+            .filter(Boolean),
+        )
+        .catch(() => []);
+      chunks.push(...texts);
+    }
+    return detectFacebookBlockSignal(chunks.join("\n"));
+  }
+
+  private notePostFailure() {
+    this.consecutivePostFailures += 1;
+    return suspectedFacebookBlockSignal(this.consecutivePostFailures);
+  }
+
+  private resetPostFailures() {
+    this.consecutivePostFailures = 0;
+    this.consecutiveComposerFailures = 0;
+  }
+
+  private async stopForBlock(
+    session: PostSession,
+    group: FacebookGroup,
+    detection: NonNullable<FacebookBlockDetection>,
+  ) {
+    const reason = `facebook_block_${detection.signal.id}`;
+    const cooldownSettings = storage.startBlockCooldown(detection.signal.label);
+    this.stopped = true;
+    this.paused = false;
+    this.waitingForHuman = false;
+    this.blocked = true;
+    this.activeSessionId = null;
+    const existingResult = storage.resultForGroup(session.id, group.id);
+    if (!existingResult) {
+      this.record(session, group, "needs_review", reason);
+    }
+    storage.updateSession(session.id, {
+      state: "blocked",
+      completedAt: timestamp(),
+    });
+    await this.saveDebugArtifacts(session, group, reason, {
+      matchedSignal: detection.signal.label,
+      matchedText: detection.matchedText,
+      blockCooldownUntil: cooldownSettings.blockCooldownUntil,
+    });
+    this.setDiagnostics({
+      runnerStatus: "blocked",
+      lastError:
+        "Facebook has temporarily limited this account's posting. GroupBlast stopped everything to protect the account.",
+      lastDetectedState: reason,
+      blockCooldownUntil: cooldownSettings.blockCooldownUntil,
+    });
   }
 
   private async detectFacebookSessionStatus(page: Page): Promise<FacebookSessionCheckStatus> {
@@ -1690,15 +1818,17 @@ class HumanReviewRunner {
     this.setDiagnostics({
       currentUrl: page.url(),
       pageTitle: await page.title().catch(() => this.diagnostics.pageTitle),
-      runnerStatus: this.paused
-        ? "paused"
-        : this.waitingForHuman
-          ? "waiting_for_human"
-          : this.stopped
-            ? "stopped"
-            : this.activeSessionId
-              ? "running"
-              : "idle",
+      runnerStatus: this.blocked
+        ? "blocked"
+        : this.paused
+          ? "paused"
+          : this.waitingForHuman
+            ? "waiting_for_human"
+            : this.stopped
+              ? "stopped"
+              : this.activeSessionId
+                ? "running"
+                : "idle",
     });
     return this.diagnostics;
   }

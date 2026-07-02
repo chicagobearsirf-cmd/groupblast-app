@@ -373,7 +373,18 @@ app.post("/api/scheduled-posts/:id/cancel", (req, res) => {
 app.post(
   "/api/sessions/:id/start",
   asyncRoute(async (req, res) => {
-    await runner.start(param(req.params.id));
+    const overrideCooldown = Boolean(req.body?.overrideBlockCooldown);
+    const cooldown = storage.getActiveBlockCooldown();
+    if (cooldown && !overrideCooldown) {
+      return res.status(423).json({
+        error:
+          "Facebook has temporarily limited your account's posting. GroupBlast paused everything to protect your account.",
+        code: "facebook_block_cooldown_active",
+        blockCooldownUntil: cooldown.until,
+        blockCooldownReason: cooldown.reason,
+      });
+    }
+    await runner.start(param(req.params.id), { ignoreBlockCooldown: overrideCooldown });
     res.json(await runner.getStatus(param(req.params.id)));
   }),
 );
