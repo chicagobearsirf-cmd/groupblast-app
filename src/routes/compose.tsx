@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,8 +8,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
+import { ErrorState } from "@/components/layout/ErrorState";
 import { api } from "@/lib/api";
 import { queryKeys, useGroups, useInvalidate, useSettings } from "@/hooks/use-api";
+import type { FacebookGroup } from "@/types";
 
 export const Route = createFileRoute("/compose")({
   component: ComposerPage,
@@ -17,29 +20,50 @@ export const Route = createFileRoute("/compose")({
 function ComposerPage() {
   const navigate = useNavigate();
   const invalidate = useInvalidate();
-  const { data: groups = [] } = useGroups();
+  const {
+    data: groups = [],
+    isLoading: groupsLoading,
+    isError: groupsError,
+    refetch: refetchGroups,
+  } = useGroups();
   const { data: settings } = useSettings();
+  const groupListRef = useRef<HTMLDivElement | null>(null);
 
   const [postText, setPostText] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
 
-  const filtered = groups.filter(
-    (g) =>
-      g.status === "active" &&
-      (!search || g.name.toLowerCase().includes(search.toLowerCase())),
-  );
+  const filtered = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    return groups.filter(
+      (group) =>
+        group.status === "active" &&
+        (!normalizedSearch || group.name.toLowerCase().includes(normalizedSearch)),
+    );
+  }, [groups, search]);
+
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => groupListRef.current,
+    estimateSize: () => 48,
+    overscan: 8,
+  });
 
   const estimateSeconds = settings
     ? selected.length * ((settings.minDelaySeconds + settings.maxDelaySeconds) / 2 + 20)
     : 0;
 
-  const toggleGroup = (id: string, checked: boolean) =>
-    setSelected((prev) => (checked ? [...prev, id] : prev.filter((x) => x !== id)));
+  const toggleGroup = useCallback((id: string, checked: boolean) => {
+    setSelected((prev) => {
+      if (checked) return prev.includes(id) ? prev : [...prev, id];
+      return prev.filter((x) => x !== id);
+    });
+  }, []);
 
-  const selectAll = () => setSelected(filtered.map((g) => g.id));
-  const clearAll = () => setSelected([]);
+  const selectAll = useCallback(() => setSelected(filtered.map((g) => g.id)), [filtered]);
+  const clearAll = useCallback(() => setSelected([]), []);
 
   const createSession = async () => {
     setCreating(true);
@@ -118,42 +142,91 @@ function ComposerPage() {
                 onChange={(e) => setSearch(e.target.value)}
                 className="flex-1"
               />
-              <Button variant="outline" size="sm" onClick={selectAll}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={groupsLoading || groupsError || !filtered.length}
+                onClick={selectAll}
+              >
                 All
               </Button>
-              <Button variant="outline" size="sm" onClick={clearAll}>
+              <Button variant="outline" size="sm" disabled={!selected.length} onClick={clearAll}>
                 Clear
               </Button>
             </div>
-            <div className="flex max-h-[380px] flex-col gap-1 overflow-y-auto">
-              {filtered.map((group) => (
-                <label
-                  key={group.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-md border p-2.5 hover:bg-accent"
+            {groupsLoading ? (
+              <p className="p-2 text-sm text-muted-foreground">Loading groups…</p>
+            ) : groupsError ? (
+              <ErrorState
+                title="Can't reach the local API"
+                text="Groups could not load from the local automation service."
+                onRetry={() => void refetchGroups()}
+              />
+            ) : filtered.length ? (
+              <div
+                ref={groupListRef}
+                className="overflow-y-auto"
+                style={{
+                  height: Math.min(380, Math.max(48, rowVirtualizer.getTotalSize())),
+                }}
+              >
+                <div
+                  className="relative"
+                  style={{
+                    height: `${rowVirtualizer.getTotalSize()}px`,
+                  }}
                 >
-                  <Checkbox
-                    checked={selected.includes(group.id)}
-                    onCheckedChange={(checked) => toggleGroup(group.id, Boolean(checked))}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {group.name}
-                  </span>
-                  {group.category && group.category !== "General" ? (
-                    <span className="shrink-0 text-xs text-muted-foreground">{group.category}</span>
-                  ) : null}
-                </label>
-              ))}
-              {!filtered.length ? (
-                <p className="p-2 text-sm text-muted-foreground">
-                  {groups.length === 0
-                    ? "No groups yet — go to Add Groups first."
-                    : "No groups match your search."}
-                </p>
-              ) : null}
-            </div>
+                  {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const group = filtered[virtualRow.index];
+                    return (
+                      <ComposeGroupRow
+                        key={group.id}
+                        group={group}
+                        checked={selectedSet.has(group.id)}
+                        onToggle={toggleGroup}
+                        style={{
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <p className="p-2 text-sm text-muted-foreground">
+                {groups.length === 0
+                  ? "No groups yet — go to Add Groups first."
+                  : "No groups match your search."}
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
     </div>
   );
 }
+
+const ComposeGroupRow = memo(function ComposeGroupRow({
+  group,
+  checked,
+  onToggle,
+  style,
+}: {
+  group: FacebookGroup;
+  checked: boolean;
+  onToggle: (id: string, checked: boolean) => void;
+  style: CSSProperties;
+}) {
+  return (
+    <label
+      className="absolute left-0 right-0 flex cursor-pointer items-center gap-3 rounded-md border p-2.5 hover:bg-accent"
+      style={style}
+    >
+      <Checkbox checked={checked} onCheckedChange={(next) => onToggle(group.id, Boolean(next))} />
+      <span className="min-w-0 flex-1 truncate text-sm font-medium">{group.name}</span>
+      {group.category && group.category !== "General" ? (
+        <span className="shrink-0 text-xs text-muted-foreground">{group.category}</span>
+      ) : null}
+    </label>
+  );
+});
