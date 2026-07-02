@@ -68,8 +68,9 @@ const defaultChromeUserDataDir =
 
 const defaultSettings: AppSettings = {
   defaultMode: "human_review",
-  minDelaySeconds: 20,
-  maxDelaySeconds: 45,
+  minDelaySeconds: 480,
+  maxDelaySeconds: 1200,
+  maxPostsPerDay: 25,
   maxGroupsPerSession: 250,
   maxJoinedGroupsSyncPerRun: 500,
   joinedGroupsSyncScrollDelayMs: 1500,
@@ -255,9 +256,22 @@ const normalizeSettings = (settings: AppSettings): AppSettings => {
     (settings.browserMode as string) === "existing_chrome_profile"
       ? "imported_chrome_profile_snapshot"
       : "managed_playwright_profile";
+  // Pre-July-2026 builds shipped 20–45s defaults, which got a real account
+  // spam-blocked at ~75 posts. Users still on those exact values never chose
+  // them — upgrade to the safe defaults. Explicit custom values are kept, but
+  // floored at 60s: below that Facebook's rate detection is near-certain.
+  if (settings.minDelaySeconds === 20 && settings.maxDelaySeconds === 45) {
+    settings.minDelaySeconds = defaultSettings.minDelaySeconds;
+    settings.maxDelaySeconds = defaultSettings.maxDelaySeconds;
+  }
+  settings.minDelaySeconds = Math.max(60, settings.minDelaySeconds);
   if (settings.minDelaySeconds > settings.maxDelaySeconds) {
     settings.maxDelaySeconds = settings.minDelaySeconds;
   }
+  if (!Number.isFinite(settings.maxPostsPerDay) || settings.maxPostsPerDay < 1) {
+    settings.maxPostsPerDay = defaultSettings.maxPostsPerDay;
+  }
+  settings.maxPostsPerDay = Math.floor(settings.maxPostsPerDay);
   settings.joinedGroupsSyncUrl = sanitizeJoinedGroupsSyncUrl(settings.joinedGroupsSyncUrl);
   settings.browserProfilePath = expandHome(settings.browserProfilePath);
   settings.chromeUserDataDir = expandHome(settings.chromeUserDataDir);
@@ -542,6 +556,16 @@ export const storage = {
         ? (db.prepare(sql).all(sessionId) as ResultRow[])
         : (db.prepare(sql).all() as ResultRow[])
     ).map(rowToResult);
+  },
+  countPostedInLast24Hours(): number {
+    // Timestamps are ISO-8601 UTC strings, so string comparison is chronological.
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const row = db
+      .prepare(
+        "select count(*) as total from post_session_results where status = 'posted' and timestamp >= ?",
+      )
+      .get(since) as { total: number };
+    return Number(row.total ?? 0);
   },
   createScheduledPosts(
     rows: Array<{

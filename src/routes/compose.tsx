@@ -186,7 +186,11 @@ function ComposerPage() {
               <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
                 {postMode === "spread"
                   ? `${selected.length} group${selected.length === 1 ? "" : "s"} selected · about ${spreadSummary.postsPerDay} post${spreadSummary.postsPerDay === 1 ? "" : "s"} per day, finishing ${spreadSummary.finishLabel}`
-                  : `${selected.length} group${selected.length === 1 ? "" : "s"} selected · ~${Math.ceil(estimateSeconds / 60)} min`}
+                  : `${selected.length} group${selected.length === 1 ? "" : "s"} selected · ${
+                      estimateSeconds >= 5400
+                        ? `~${(estimateSeconds / 3600).toFixed(1)} hours`
+                        : `~${Math.ceil(estimateSeconds / 60)} min`
+                    }`}
               </div>
             ) : null}
             <RadioGroup
@@ -248,10 +252,21 @@ function ComposerPage() {
                 </p>
               </div>
             ) : null}
-            {selected.length > 5 ? (
+            {selected.length > 5 && selected.length < 20 ? (
               <Alert variant="destructive">
                 <AlertDescription>
                   More than 5 groups selected — run a one-group test first.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            {selected.length >= 20 ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  Posting to this many groups can get your Facebook account temporarily restricted,
+                  especially with the same text in every group. We recommend{" "}
+                  {settings?.maxPostsPerDay ?? 25} or fewer posts per day — GroupBlast will
+                  automatically stop at your daily limit and you can continue tomorrow. Changing up
+                  your wording between groups also helps a lot.
                 </AlertDescription>
               </Alert>
             ) : null}

@@ -337,6 +337,17 @@ function QueuePage() {
               </AlertDescription>
             </Alert>
           ) : null}
+          {status.diagnostics.lastDetectedState === "daily_limit_reached" ? (
+            <Alert>
+              <AlertTitle>Done for today</AlertTitle>
+              <AlertDescription>
+                You've reached your daily posting limit ({settings?.maxPostsPerDay ?? 25} posts in
+                24 hours), so GroupBlast stopped to protect your Facebook account. Your remaining
+                groups are saved — press Start tomorrow to continue where you left off. You can
+                adjust the limit in Settings, but we recommend keeping it at 25 or below.
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {settings?.facebookSessionStatus !== "logged_in" ? (
             <Alert variant="destructive">
               <AlertDescription>

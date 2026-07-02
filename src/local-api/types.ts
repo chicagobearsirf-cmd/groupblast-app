@@ -75,6 +75,7 @@ export type AppSettings = {
   defaultMode: "human_review";
   minDelaySeconds: number;
   maxDelaySeconds: number;
+  maxPostsPerDay: number;
   maxGroupsPerSession: number;
   maxJoinedGroupsSyncPerRun: number;
   joinedGroupsSyncScrollDelayMs: number;

@@ -407,6 +407,10 @@ function SettingsPage() {
                 value={form.minDelaySeconds}
                 onChange={(event) => set({ minDelaySeconds: Number(event.target.value) })}
               />
+              <p className="text-xs text-muted-foreground">
+                Time between posts. We recommend 480+ (8 minutes) — posting faster can get your
+                Facebook account temporarily restricted.
+              </p>
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="max-delay">Max delay seconds</Label>
@@ -416,6 +420,19 @@ function SettingsPage() {
                 value={form.maxDelaySeconds}
                 onChange={(event) => set({ maxDelaySeconds: Number(event.target.value) })}
               />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="max-posts-day">Max posts per day</Label>
+              <Input
+                id="max-posts-day"
+                type="number"
+                value={form.maxPostsPerDay}
+                onChange={(event) => set({ maxPostsPerDay: Number(event.target.value) })}
+              />
+              <p className="text-xs text-muted-foreground">
+                GroupBlast stops for the day after this many posts in 24 hours. Keep it at 25 or
+                below to stay under Facebook's radar — going higher risks a temporary block.
+              </p>
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="max-groups">Max groups per session</Label>
