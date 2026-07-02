@@ -53,6 +53,21 @@ type PlanStatusRpc = {
 
 type ApplyPromoCodeResult = { ok: boolean; discountPercent?: number; error?: string };
 
+// Stable machine ID from the local API, used server-side to stop the same
+// machine from farming fresh trials with new emails. Cached for the session.
+let cachedDeviceId: string | null = null;
+async function getDeviceId(): Promise<string | null> {
+  if (cachedDeviceId) return cachedDeviceId;
+  try {
+    const res = await fetch("http://localhost:3001/api/device-id");
+    const data = (await res.json()) as { deviceId?: string };
+    cachedDeviceId = data.deviceId ?? null;
+  } catch {
+    cachedDeviceId = null;
+  }
+  return cachedDeviceId;
+}
+
 export function usePlanStatus(): PlanStatusState & {
   applyPromoCode: (code: string) => Promise<ApplyPromoCodeResult>;
 } {
@@ -89,7 +104,11 @@ export function usePlanStatus(): PlanStatusState & {
     }
 
     setState((current) => ({ ...current, isLoading: true }));
-    const { data, error } = await client.rpc("check_trial_status", { p_user_id: user.id });
+    const deviceId = await getDeviceId();
+    const { data, error } = await client.rpc("check_trial_status", {
+      p_user_id: user.id,
+      p_device_id: deviceId,
+    });
     if (error) {
       setState({
         status: "expired",

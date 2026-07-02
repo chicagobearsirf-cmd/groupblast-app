@@ -13,7 +13,22 @@ function priceAfterDiscount(discountPercent: number) {
 }
 
 function TrialBanner({ daysRemaining }: { daysRemaining: number }) {
-  const label = daysRemaining === 1 ? "1 day remaining" : `${daysRemaining} days remaining`;
+  // Final day: switch to an urgent banner with a direct subscribe CTA so the
+  // hard gate the next day is never a surprise.
+  if (daysRemaining <= 1) {
+    return (
+      <div className="border-b bg-amber-500 px-4 py-2 text-center text-sm font-semibold text-amber-950">
+        Your free trial ends today — {""}
+        <a
+          href={`mailto:${contactEmail}?subject=${encodeURIComponent("GroupBlast subscription")}`}
+          className="underline"
+        >
+          email us to keep posting
+        </a>
+      </div>
+    );
+  }
+  const label = `${daysRemaining} days remaining`;
   return (
     <div className="border-b bg-[#1e3a5f] px-4 py-2 text-center text-sm font-medium text-white">
       Trial: {label}

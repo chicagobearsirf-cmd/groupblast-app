@@ -1,4 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { join, resolve } from "node:path";
 import express from "express";
 import {
   extensionDir,
@@ -108,6 +110,32 @@ app.get("/api/auth/session-relay", (_req, res) => {
     return res.json({ ok: true, session });
   }
   res.json({ ok: true, session: null });
+});
+
+// Stable per-machine ID for trial-abuse prevention. Generated once and persisted
+// in the app's data dir; reported to check_trial_status so a new account on the
+// same machine inherits the original trial clock instead of a fresh trial.
+const deviceIdDataDir = process.env.GROUPBLAST_DATA_DIR
+  ? resolve(process.env.GROUPBLAST_DATA_DIR)
+  : resolve(process.cwd(), "data");
+const deviceIdPath = join(deviceIdDataDir, "device-id");
+
+app.get("/api/device-id", (_req, res) => {
+  let id = "";
+  try {
+    id = readFileSync(deviceIdPath, "utf8").trim();
+  } catch {
+    // first run — no file yet
+  }
+  if (!id) {
+    id = randomUUID();
+    try {
+      writeFileSync(deviceIdPath, id);
+    } catch {
+      // read-only fs edge case: fall through with the in-memory id
+    }
+  }
+  res.json({ ok: true, deviceId: id });
 });
 
 app.get("/api/groups", (req, res) => {
