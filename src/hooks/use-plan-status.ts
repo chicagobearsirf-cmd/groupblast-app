@@ -8,6 +8,7 @@ type PlanStatusState = {
   status: PlanStatus;
   hasAccess: boolean;
   isPilot: boolean;
+  isAdmin: boolean;
   trialEndsAt: string | null;
   daysRemaining: number;
   aiAccess: boolean;
@@ -25,6 +26,7 @@ const localAccess: PlanStatusState = {
   status: "active",
   hasAccess: true,
   isPilot: false,
+  isAdmin: false,
   trialEndsAt: null,
   daysRemaining: 0,
   aiAccess: false,
@@ -42,6 +44,7 @@ const loadingState: PlanStatusState = {
   status: "unknown",
   hasAccess: false,
   isPilot: false,
+  isAdmin: false,
   trialEndsAt: null,
   daysRemaining: 0,
   aiAccess: false,
@@ -59,6 +62,7 @@ type PlanStatusRpc = {
   status?: string;
   has_access?: boolean;
   is_pilot?: boolean;
+  is_admin?: boolean;
   trial_ends_at?: string | null;
   days_remaining?: number;
   ai_access?: boolean;
@@ -144,6 +148,7 @@ export function usePlanStatus(): PlanStatusState & {
       status,
       hasAccess: Boolean(payload.has_access),
       isPilot: Boolean(payload.is_pilot),
+      isAdmin: Boolean(payload.is_admin),
       trialEndsAt: payload.trial_ends_at ?? null,
       daysRemaining: Number(payload.days_remaining ?? 0),
       aiAccess: Boolean(payload.ai_access),

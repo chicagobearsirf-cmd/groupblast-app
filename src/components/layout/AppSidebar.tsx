@@ -6,6 +6,7 @@ import {
   ListOrdered,
   History,
   Settings,
+  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { Link, type LinkOptions } from "@tanstack/react-router";
@@ -24,6 +25,8 @@ import { Badge } from "@/components/ui/badge";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { useSettings } from "@/hooks/use-api";
 import { BrandMark } from "@/components/layout/BrandMark";
+import { useAuth } from "@/components/auth/auth-context";
+import { usePlanStatus } from "@/hooks/use-plan-status";
 
 const items = [
   { title: "Home", url: "/", icon: LayoutDashboard, tour: "nav-dashboard" },
@@ -38,7 +41,14 @@ const items = [
 
 export function AppSidebar() {
   const { data: settings } = useSettings();
+  const { mode } = useAuth();
+  const planStatus = usePlanStatus();
   const autoSubmit = settings?.autoSubmitEnabled ?? false;
+  const visibleItems =
+    mode !== "local" && planStatus.isAdmin
+      ? [...items, { title: "Admin", url: "/admin", icon: ShieldCheck, tour: "nav-admin" }]
+      : items;
+
   return (
     <Sidebar>
       <SidebarContent>
@@ -49,7 +59,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Menu</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
+              {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <Link to={item.url as LinkOptions["to"]} data-tour={item.tour}>
