@@ -82,6 +82,7 @@ jobs:
   verify-private-candidates:
     needs: enforce-trusted-ref
     runs-on: macos-latest
+    environment: groupblast-stable-production
     permissions:
       contents: read
     outputs:
