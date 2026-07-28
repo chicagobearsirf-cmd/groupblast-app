@@ -3,7 +3,7 @@
 This repository is the official binary-only release channel for GroupBlast.
 
 - Customer installers and updater metadata are published under
-  [Releases](../../releases).
+  [Releases](https://github.com/chicagobearsirf-cmd/groupblast-app/releases).
 - GroupBlast application source code is proprietary and maintained in a
   separate private repository.
 - This repository must never contain application source, internal handoffs,
