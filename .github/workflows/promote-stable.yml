@@ -1,0 +1,454 @@
+# Binary-only customer release promotion. Application source and builds live
+# in the private groupblast-app-beta repository. This workflow never rebuilds,
+# and the public release tag points only to this sanitized release repository.
+name: Promote exact private candidates to stable
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Exact customer-facing mutation
+        required: true
+        type: choice
+        options:
+          - create-cross-platform-stable
+      version:
+        description: Exact semantic version
+        required: true
+      source_sha:
+        description: Exact private source commit
+        required: true
+      candidate_repo:
+        description: Private repository containing both candidate runs
+        required: true
+        default: chicagobearsirf-cmd/groupblast-app-beta
+      windows_candidate_run_id:
+        description: Successful private Windows workflow run ID
+        required: true
+      windows_candidate_artifact_name:
+        description: Exact private Windows workflow artifact name
+        required: true
+      windows_primary_artifact_name:
+        description: Exact Windows installer filename
+        required: true
+      windows_primary_artifact_sha256:
+        description: Exact lowercase Windows installer SHA-256
+        required: true
+      mac_candidate_run_id:
+        description: Successful private Mac workflow run ID
+        required: true
+      mac_candidate_artifact_name:
+        description: Exact private Mac workflow artifact name
+        required: true
+      mac_primary_artifact_name:
+        description: Exact universal Mac DMG filename
+        required: true
+      mac_primary_artifact_sha256:
+        description: Exact lowercase universal Mac DMG SHA-256
+        required: true
+      channel:
+        description: Customer release channel
+        required: true
+        type: choice
+        options:
+          - github-stable-release
+      confirm:
+        description: Paste the exact approval sentence from the sign-off packet
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: groupblast-stable-promotion
+  cancel-in-progress: false
+
+jobs:
+  enforce-trusted-ref:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Refuse dispatch outside protected public main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$WORKFLOW_REF" != "refs/heads/main" ] || [ "$REF_PROTECTED" != "true" ]; then
+            echo "Stable promotion must run from protected main."
+            exit 1
+          fi
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+          REF_PROTECTED: ${{ github.ref_protected }}
+
+  verify-private-candidates:
+    needs: enforce-trusted-ref
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    outputs:
+      bundle_digest: ${{ steps.upload.outputs.artifact-digest }}
+      bundle_id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - name: Verify exact approval and inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$WINDOWS_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$MAC_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [ "$ACTION" = "create-cross-platform-stable" ]
+          [ "$CHANNEL" = "github-stable-release" ]
+          [ "$CANDIDATE_REPO" = "chicagobearsirf-cmd/groupblast-app-beta" ]
+          expected="APPROVED FOR PUBLIC RELEASE: GroupBlast $VERSION for Windows and Mac, commit $SOURCE_SHA, Windows artifact $WINDOWS_NAME SHA256 $WINDOWS_SHA256, Mac artifact $MAC_NAME SHA256 $MAC_SHA256, channel: $CHANNEL, action: $ACTION. Promote now."
+          if [ "$CONFIRM" != "$expected" ]; then
+            echo "Approval sentence mismatch. Expected exactly:"
+            echo "$expected"
+            exit 1
+          fi
+        env:
+          ACTION: ${{ inputs.action }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          WINDOWS_NAME: ${{ inputs.windows_primary_artifact_name }}
+          WINDOWS_SHA256: ${{ inputs.windows_primary_artifact_sha256 }}
+          MAC_NAME: ${{ inputs.mac_primary_artifact_name }}
+          MAC_SHA256: ${{ inputs.mac_primary_artifact_sha256 }}
+          CHANNEL: ${{ inputs.channel }}
+          CANDIDATE_REPO: ${{ inputs.candidate_repo }}
+          CONFIRM: ${{ inputs.confirm }}
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prove the public repository is source-free
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -type f ! -path './.git/*' -print | sed 's#^\./##' | sort > "$RUNNER_TEMP/actual-files.txt"
+          cat > "$RUNNER_TEMP/expected-files.txt" <<'FILES'
+          .github/workflows/promote-stable.yml
+          COPYRIGHT.md
+          README.md
+          SECURITY.md
+          scripts/verify-customer-candidate.mjs
+          FILES
+          diff -u "$RUNNER_TEMP/expected-files.txt" "$RUNNER_TEMP/actual-files.txt"
+
+      - name: Verify exact private source main and package version
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo_json=$(gh api "repos/$CANDIDATE_REPO")
+          [ "$(jq -r '.private' <<<"$repo_json")" = "true" ]
+          [ "$(jq -r '.default_branch' <<<"$repo_json")" = "main" ]
+          main_sha=$(gh api "repos/$CANDIDATE_REPO/git/ref/heads/main" --jq '.object.sha')
+          if [ "$main_sha" != "$SOURCE_SHA" ]; then
+            echo "Private main is $main_sha, not approved source $SOURCE_SHA."
+            exit 1
+          fi
+          package_version=$(
+            gh api "repos/$CANDIDATE_REPO/contents/package.json?ref=$SOURCE_SHA" --jq '.content' |
+              node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>console.log(JSON.parse(Buffer.from(s.trim(),"base64")).version))'
+          )
+          [ "$package_version" = "$VERSION" ]
+        env:
+          GH_TOKEN: ${{ secrets.GROUPBLAST_BETA_ARTIFACT_TOKEN }}
+          CANDIDATE_REPO: ${{ inputs.candidate_repo }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.version }}
+
+      - name: Download exact private candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          download_candidate() {
+            platform=$1
+            run_id=$2
+            artifact_name=$3
+            expected_workflow=$4
+            run_json=$(gh run view "$run_id" --repo "$CANDIDATE_REPO" --json conclusion,event,headSha,name)
+            [ "$(jq -r '.conclusion' <<<"$run_json")" = "success" ]
+            [ "$(jq -r '.event' <<<"$run_json")" = "workflow_dispatch" ]
+            [ "$(jq -r '.headSha' <<<"$run_json")" = "$SOURCE_SHA" ]
+            [ "$(jq -r '.name' <<<"$run_json")" = "$expected_workflow" ]
+            mkdir -p "$RUNNER_TEMP/candidate-$platform"
+            gh run download "$run_id" \
+              --repo "$CANDIDATE_REPO" \
+              --name "$artifact_name" \
+              --dir "$RUNNER_TEMP/candidate-$platform"
+          }
+          download_candidate windows "$WINDOWS_RUN_ID" "$WINDOWS_ARTIFACT_NAME" "Build Windows installer"
+          download_candidate mac "$MAC_RUN_ID" "$MAC_ARTIFACT_NAME" "Build macOS app"
+        env:
+          GH_TOKEN: ${{ secrets.GROUPBLAST_BETA_ARTIFACT_TOKEN }}
+          CANDIDATE_REPO: ${{ inputs.candidate_repo }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          WINDOWS_RUN_ID: ${{ inputs.windows_candidate_run_id }}
+          WINDOWS_ARTIFACT_NAME: ${{ inputs.windows_candidate_artifact_name }}
+          MAC_RUN_ID: ${{ inputs.mac_candidate_run_id }}
+          MAC_ARTIFACT_NAME: ${{ inputs.mac_candidate_artifact_name }}
+
+      - name: Verify provenance, hashes, sizes, and updater metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-customer-candidate.mjs \
+            --root "$RUNNER_TEMP/candidate-windows" \
+            --platform windows \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --primary-name "$WINDOWS_NAME" \
+            --primary-sha256 "$WINDOWS_SHA256" \
+            --candidate-repo "$CANDIDATE_REPO" \
+            --output "$RUNNER_TEMP/windows-receipt.json"
+          node scripts/verify-customer-candidate.mjs \
+            --root "$RUNNER_TEMP/candidate-mac" \
+            --platform mac \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --primary-name "$MAC_NAME" \
+            --primary-sha256 "$MAC_SHA256" \
+            --candidate-repo "$CANDIDATE_REPO" \
+            --output "$RUNNER_TEMP/mac-receipt.json"
+        env:
+          VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          WINDOWS_NAME: ${{ inputs.windows_primary_artifact_name }}
+          WINDOWS_SHA256: ${{ inputs.windows_primary_artifact_sha256 }}
+          MAC_NAME: ${{ inputs.mac_primary_artifact_name }}
+          MAC_SHA256: ${{ inputs.mac_primary_artifact_sha256 }}
+          CANDIDATE_REPO: ${{ inputs.candidate_repo }}
+
+      - name: Reverify signed, notarized, universal Mac payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          receipt="$RUNNER_TEMP/mac-receipt.json"
+          dmg=$(jq -r '.artifactPaths[] | select(endswith(".dmg"))' "$receipt")
+          zip=$(jq -r '.artifactPaths[] | select(endswith("-mac.zip"))' "$receipt")
+
+          verify_app() {
+            app=$1
+            label=$2
+            info="$app/Contents/Info.plist"
+            [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$info")" = "$VERSION" ]
+            [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$info")" = "$VERSION" ]
+            codesign --verify --deep --strict --verbose=4 "$app"
+            codesign -dv --verbose=4 "$app" 2>&1 | tee "$RUNNER_TEMP/codesign-$label.txt"
+            grep -q 'TeamIdentifier=ACJ3NVDCJY' "$RUNNER_TEMP/codesign-$label.txt"
+            grep -q 'flags=.*runtime' "$RUNNER_TEMP/codesign-$label.txt"
+            archs=$(lipo -archs "$app/Contents/MacOS/GroupBlast")
+            grep -qw arm64 <<<"$archs"
+            grep -qw x86_64 <<<"$archs"
+            spctl --assess --type execute --verbose=4 "$app" 2>&1 |
+              tee "$RUNNER_TEMP/spctl-$label.txt" || true
+            grep -q 'source=Notarized Developer ID' "$RUNNER_TEMP/spctl-$label.txt"
+            xcrun stapler validate "$app"
+          }
+
+          hdiutil verify "$dmg"
+          mkdir -p "$RUNNER_TEMP/mac-mount"
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$RUNNER_TEMP/mac-mount"
+          trap 'hdiutil detach "$RUNNER_TEMP/mac-mount" >/dev/null 2>&1 || true' EXIT
+          verify_app "$RUNNER_TEMP/mac-mount/GroupBlast.app" dmg
+          hdiutil detach "$RUNNER_TEMP/mac-mount"
+          trap - EXIT
+
+          mkdir -p "$RUNNER_TEMP/mac-zip"
+          ditto -x -k "$zip" "$RUNNER_TEMP/mac-zip"
+          app_count=$(find "$RUNNER_TEMP/mac-zip" -name GroupBlast.app -type d | wc -l | tr -d ' ')
+          [ "$app_count" = "1" ]
+          zip_app=$(find "$RUNNER_TEMP/mac-zip" -name GroupBlast.app -type d)
+          verify_app "$zip_app" zip
+        env:
+          VERSION: ${{ inputs.version }}
+
+      - name: Assemble only the eight verified customer assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/verified-bundle"
+          mkdir -p "$bundle/windows" "$bundle/mac"
+          cp "$RUNNER_TEMP/windows-receipt.json" "$bundle/windows/receipt.json"
+          cp "$RUNNER_TEMP/mac-receipt.json" "$bundle/mac/receipt.json"
+          while IFS= read -r path; do cp "$path" "$bundle/windows/$(basename "$path")"; done \
+            < <(jq -r '.artifactPaths[]' "$RUNNER_TEMP/windows-receipt.json")
+          while IFS= read -r path; do cp "$path" "$bundle/mac/$(basename "$path")"; done \
+            < <(jq -r '.artifactPaths[]' "$RUNNER_TEMP/mac-receipt.json")
+          [ "$(find "$bundle" -type f ! -name receipt.json | wc -l | tr -d ' ')" = "8" ]
+
+      - name: Upload immutable verified-candidate handoff
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: groupblast-verified-candidates-${{ github.run_id }}
+          path: ${{ runner.temp }}/verified-bundle
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: verify-private-candidates
+    runs-on: macos-latest
+    environment: groupblast-stable-production
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Recheck approval and private source at the write boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="APPROVED FOR PUBLIC RELEASE: GroupBlast $VERSION for Windows and Mac, commit $SOURCE_SHA, Windows artifact $WINDOWS_NAME SHA256 $WINDOWS_SHA256, Mac artifact $MAC_NAME SHA256 $MAC_SHA256, channel: $CHANNEL, action: $ACTION. Promote now."
+          [ "$CONFIRM" = "$expected" ]
+          [ "$(gh api "repos/$CANDIDATE_REPO/git/ref/heads/main" --jq '.object.sha')" = "$SOURCE_SHA" ]
+          [[ "$BUNDLE_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$BUNDLE_ID" =~ ^[0-9]+$ ]]
+        env:
+          GH_TOKEN: ${{ secrets.GROUPBLAST_BETA_ARTIFACT_TOKEN }}
+          ACTION: ${{ inputs.action }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          WINDOWS_NAME: ${{ inputs.windows_primary_artifact_name }}
+          WINDOWS_SHA256: ${{ inputs.windows_primary_artifact_sha256 }}
+          MAC_NAME: ${{ inputs.mac_primary_artifact_name }}
+          MAC_SHA256: ${{ inputs.mac_primary_artifact_sha256 }}
+          CHANNEL: ${{ inputs.channel }}
+          CANDIDATE_REPO: ${{ inputs.candidate_repo }}
+          CONFIRM: ${{ inputs.confirm }}
+          BUNDLE_DIGEST: ${{ needs.verify-private-candidates.outputs.bundle_digest }}
+          BUNDLE_ID: ${{ needs.verify-private-candidates.outputs.bundle_id }}
+
+      - name: Download exact verified-candidate handoff
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: groupblast-verified-candidates-${{ github.run_id }}
+          path: ${{ runner.temp }}/verified-bundle
+
+      - name: Re-hash the complete eight-asset handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_digest=$(gh api "repos/$PUBLIC_REPO/actions/artifacts/$BUNDLE_ID" --jq '.digest')
+          [ "$api_digest" = "sha256:$BUNDLE_DIGEST" ]
+          expected="$RUNNER_TEMP/expected-assets.tsv"
+          : > "$expected"
+          verify_platform() {
+            platform=$1
+            count=$2
+            root="$RUNNER_TEMP/verified-bundle/$platform"
+            receipt="$root/receipt.json"
+            [ "$(jq -r '.version' "$receipt")" = "$VERSION" ]
+            [ "$(jq -r '.sourceSha' "$receipt")" = "$SOURCE_SHA" ]
+            [ "$(jq -r '.candidateRepository' "$receipt")" = "$CANDIDATE_REPO" ]
+            [ "$(jq '.artifacts | length' "$receipt")" = "$count" ]
+            while IFS=$'\t' read -r name size wanted; do
+              [ "$(basename "$name")" = "$name" ]
+              file="$root/$name"
+              [ -f "$file" ]
+              [ "$(stat -f%z "$file")" = "$size" ]
+              [ "$(shasum -a 256 "$file" | awk '{print $1}')" = "$wanted" ]
+              printf '%s\t%s\t%s\n' "$name" "$wanted" "$size" >> "$expected"
+            done < <(jq -r '.artifacts[] | [.name, (.sizeBytes|tostring), .sha256] | @tsv' "$receipt")
+          }
+          verify_platform windows 3
+          verify_platform mac 5
+          sort -o "$expected" "$expected"
+          [ "$(wc -l < "$expected" | tr -d ' ')" = "8" ]
+          [ "$(cut -f1 "$expected" | uniq -d | wc -l | tr -d ' ')" = "0" ]
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLIC_REPO: ${{ github.repository }}
+          BUNDLE_ID: ${{ needs.verify-private-candidates.outputs.bundle_id }}
+          BUNDLE_DIGEST: ${{ needs.verify-private-candidates.outputs.bundle_digest }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          CANDIDATE_REPO: ${{ inputs.candidate_repo }}
+
+      - name: Publish once and prove public immutability
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          expected="$RUNNER_TEMP/expected-assets.tsv"
+          bundle="$RUNNER_TEMP/verified-bundle"
+
+          immutable_enabled() {
+            json=$(GH_TOKEN="$ADMIN_READ_TOKEN" gh api \
+              -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/$PUBLIC_REPO/immutable-releases")
+            [ "$(jq -r '.enabled' <<<"$json")" = "true" ]
+          }
+          assert_assets() {
+            wanted_draft=$1
+            json=$2
+            actual="$RUNNER_TEMP/actual-assets.tsv"
+            [ "$(jq -r '.tag_name' <<<"$json")" = "$tag" ]
+            [ "$(jq -r '.draft' <<<"$json")" = "$wanted_draft" ]
+            [ "$(jq -r '.prerelease' <<<"$json")" = "false" ]
+            jq -r '.assets[] | [.name, ((.digest // "")|sub("^sha256:";"")), (.size|tostring)] | @tsv' \
+              <<<"$json" | sort > "$actual"
+            diff -u "$expected" "$actual"
+          }
+
+          [ -n "$ADMIN_READ_TOKEN" ]
+          immutable_enabled
+          ! gh release view "$tag" --repo "$PUBLIC_REPO" >/dev/null 2>&1
+          ! gh api "repos/$PUBLIC_REPO/git/ref/tags/$tag" >/dev/null 2>&1
+
+          gh api --method POST "repos/$PUBLIC_REPO/git/refs" \
+            -f ref="refs/tags/$tag" \
+            -f sha="$PUBLIC_MARKER_SHA" >/dev/null
+          [ "$(gh api "repos/$PUBLIC_REPO/commits/$tag" --jq '.sha')" = "$PUBLIC_MARKER_SHA" ]
+
+          assets=()
+          while IFS= read -r path; do assets+=("$path"); done < <(
+            find "$bundle/windows" "$bundle/mac" -type f ! -name receipt.json | sort
+          )
+          notes="GroupBlast $VERSION customer release. Exact application source: $SOURCE_SHA in the private source repository. Windows remains unsigned and may show Unknown Publisher."
+          gh release create "$tag" "${assets[@]}" \
+            --repo "$PUBLIC_REPO" \
+            --verify-tag \
+            --title "$tag" \
+            --notes "$notes" \
+            --draft
+          draft=$(gh api "repos/$PUBLIC_REPO/releases/tags/$tag")
+          assert_assets true "$draft"
+          [ "$(jq -r '.immutable' <<<"$draft")" = "false" ]
+          immutable_enabled
+          gh release edit "$tag" --repo "$PUBLIC_REPO" --draft=false --latest
+
+          release=""
+          for attempt in $(seq 1 30); do
+            release=$(gh api -H 'X-GitHub-Api-Version: 2026-03-10' "repos/$PUBLIC_REPO/releases/tags/$tag")
+            [ "$(jq -r '.immutable' <<<"$release")" = "true" ] && break
+            sleep 2
+          done
+          [ "$(jq -r '.immutable' <<<"$release")" = "true" ]
+          [ "$(gh api "repos/$PUBLIC_REPO/commits/$tag" --jq '.sha')" = "$PUBLIC_MARKER_SHA" ]
+          assert_assets false "$release"
+
+          mkdir -p "$RUNNER_TEMP/public-proof"
+          while IFS=$'\t' read -r name wanted size; do
+            gh release download "$tag" --repo "$PUBLIC_REPO" --pattern "$name" --dir "$RUNNER_TEMP/public-proof"
+            file="$RUNNER_TEMP/public-proof/$name"
+            [ "$(stat -f%z "$file")" = "$size" ]
+            [ "$(shasum -a 256 "$file" | awk '{print $1}')" = "$wanted" ]
+          done < "$expected"
+          echo "Published immutable, byte-identical customer release from private candidates."
+          echo "No application source, website manifest, or customer message was changed."
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ADMIN_READ_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_AUDIT_TOKEN }}
+          PUBLIC_REPO: ${{ github.repository }}
+          PUBLIC_MARKER_SHA: ${{ github.sha }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
