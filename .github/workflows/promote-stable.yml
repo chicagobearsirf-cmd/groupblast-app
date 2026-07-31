@@ -400,33 +400,53 @@ jobs:
               <<<"$json" | sort > "$actual"
             diff -u "$expected" "$actual"
           }
+          matching_drafts() {
+            gh api "repos/$PUBLIC_REPO/releases?per_page=100" |
+              jq --arg tag "$tag" '[.[] | select(.tag_name == $tag and .draft == true)]'
+          }
 
           [ -n "$ADMIN_READ_TOKEN" ]
           immutable_enabled
           ! gh release view "$tag" --repo "$PUBLIC_REPO" >/dev/null 2>&1
-          ! gh api "repos/$PUBLIC_REPO/git/ref/tags/$tag" >/dev/null 2>&1
 
-          gh api --method POST "repos/$PUBLIC_REPO/git/refs" \
-            -f ref="refs/tags/$tag" \
-            -f sha="$PUBLIC_MARKER_SHA" >/dev/null
-          [ "$(gh api "repos/$PUBLIC_REPO/commits/$tag" --jq '.sha')" = "$PUBLIC_MARKER_SHA" ]
+          drafts=$(matching_drafts)
+          draft_count=$(jq 'length' <<<"$drafts")
+          if gh api "repos/$PUBLIC_REPO/git/ref/tags/$tag" >/dev/null 2>&1; then
+            # A failed attempt may leave an exact tag and exact draft. Resume only
+            # that byte-identical state; every other partial state fails closed.
+            [ "$(gh api "repos/$PUBLIC_REPO/commits/$tag" --jq '.sha')" = "$PUBLIC_MARKER_SHA" ]
+            [ "$draft_count" = "1" ]
+            draft=$(jq '.[0]' <<<"$drafts")
+          else
+            [ "$draft_count" = "0" ]
+            gh api --method POST "repos/$PUBLIC_REPO/git/refs" \
+              -f ref="refs/tags/$tag" \
+              -f sha="$PUBLIC_MARKER_SHA" >/dev/null
+            [ "$(gh api "repos/$PUBLIC_REPO/commits/$tag" --jq '.sha')" = "$PUBLIC_MARKER_SHA" ]
 
-          assets=()
-          while IFS= read -r path; do assets+=("$path"); done < <(
-            find "$bundle/windows" "$bundle/mac" -type f ! -name receipt.json | sort
-          )
-          notes="GroupBlast $VERSION customer release. Exact application source: $SOURCE_SHA in the private source repository. Windows remains unsigned and may show Unknown Publisher."
-          gh release create "$tag" "${assets[@]}" \
-            --repo "$PUBLIC_REPO" \
-            --verify-tag \
-            --title "$tag" \
-            --notes "$notes" \
-            --draft
-          draft=$(gh api "repos/$PUBLIC_REPO/releases/tags/$tag")
+            assets=()
+            while IFS= read -r path; do assets+=("$path"); done < <(
+              find "$bundle/windows" "$bundle/mac" -type f ! -name receipt.json | sort
+            )
+            notes="GroupBlast $VERSION customer release. Exact application source: $SOURCE_SHA in the private source repository. Windows remains unsigned and may show Unknown Publisher."
+            gh release create "$tag" "${assets[@]}" \
+              --repo "$PUBLIC_REPO" \
+              --verify-tag \
+              --title "$tag" \
+              --notes "$notes" \
+              --draft
+            drafts=$(matching_drafts)
+            [ "$(jq 'length' <<<"$drafts")" = "1" ]
+            draft=$(jq '.[0]' <<<"$drafts")
+          fi
           assert_assets true "$draft"
           [ "$(jq -r '.immutable' <<<"$draft")" = "false" ]
           immutable_enabled
-          gh release edit "$tag" --repo "$PUBLIC_REPO" --draft=false --latest
+          draft_id=$(jq -r '.id' <<<"$draft")
+          [[ "$draft_id" =~ ^[0-9]+$ ]]
+          gh api --method PATCH "repos/$PUBLIC_REPO/releases/$draft_id" \
+            -F draft=false \
+            -f make_latest=true >/dev/null
 
           release=""
           for attempt in $(seq 1 30); do
