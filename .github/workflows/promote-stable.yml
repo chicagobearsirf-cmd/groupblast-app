@@ -128,14 +128,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          find . -type f ! -path './.git/*' -print | sed 's#^\./##' | sort > "$RUNNER_TEMP/actual-files.txt"
-          cat > "$RUNNER_TEMP/expected-files.txt" <<'FILES'
+          find . -type f ! -path './.git/*' -print | sed 's#^\./##' | LC_ALL=C sort > "$RUNNER_TEMP/actual-files.txt"
+          cat > "$RUNNER_TEMP/expected-files.unsorted.txt" <<'FILES'
           .github/workflows/promote-stable.yml
           COPYRIGHT.md
           README.md
           SECURITY.md
           scripts/verify-customer-candidate.mjs
           FILES
+          LC_ALL=C sort "$RUNNER_TEMP/expected-files.unsorted.txt" > "$RUNNER_TEMP/expected-files.txt"
           diff -u "$RUNNER_TEMP/expected-files.txt" "$RUNNER_TEMP/actual-files.txt"
 
       - name: Verify exact private source main and package version
