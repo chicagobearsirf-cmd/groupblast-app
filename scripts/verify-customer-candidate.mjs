@@ -111,13 +111,44 @@ if (!Array.isArray(provenance.artifacts) || provenance.artifacts.length !== expe
   fail(`${args.platform} provenance must list exactly ${expectedCount} artifacts.`);
 }
 
-const payloadFiles = allFiles.filter(
-  (path) => basename(path) !== "CUSTOMER-CANDIDATE-PROVENANCE.json",
+const expectedArtifactNames = new Set(
+  provenance.artifacts.map((artifact) => artifact.name),
+);
+const payloadFiles = allFiles.filter((path) =>
+  expectedArtifactNames.has(basename(path)),
 );
 if (payloadFiles.length !== expectedCount) {
   fail(
     `${args.platform} artifact contains ${payloadFiles.length} payload files, expected ${expectedCount}.`,
   );
+}
+
+const candidateMetadataFiles = allFiles.filter((path) => {
+  const name = basename(path);
+  return (
+    name !== "CUSTOMER-CANDIDATE-PROVENANCE.json" &&
+    !expectedArtifactNames.has(name)
+  );
+});
+if (args.platform === "windows") {
+  if (
+    candidateMetadataFiles.length !== 1 ||
+    basename(candidateMetadataFiles[0]) !== "package.json"
+  ) {
+    fail("Windows candidate must contain only the exact package.json build metadata extra.");
+  }
+  const packageMetadata = JSON.parse(
+    readFileSync(candidateMetadataFiles[0], "utf8"),
+  );
+  if (
+    packageMetadata.name !== "groupblast" ||
+    packageMetadata.version !== args.version ||
+    packageMetadata.private !== true
+  ) {
+    fail("Windows package.json build metadata identity is invalid.");
+  }
+} else if (candidateMetadataFiles.length !== 0) {
+  fail("Mac candidate contains unexpected non-customer metadata files.");
 }
 
 const fileByName = new Map();
