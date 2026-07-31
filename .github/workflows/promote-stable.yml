@@ -414,7 +414,15 @@ jobs:
           if gh api "repos/$PUBLIC_REPO/git/ref/tags/$tag" >/dev/null 2>&1; then
             # A failed attempt may leave an exact tag and exact draft. Resume only
             # that byte-identical state; every other partial state fails closed.
-            [ "$(gh api "repos/$PUBLIC_REPO/commits/$tag" --jq '.sha')" = "$PUBLIC_MARKER_SHA" ]
+            release_marker_sha=$(gh api "repos/$PUBLIC_REPO/commits/$tag" --jq '.sha')
+            comparison=$(gh api "repos/$PUBLIC_REPO/compare/$release_marker_sha...$PUBLIC_MARKER_SHA")
+            [ "$(jq -r '.merge_base_commit.sha' <<<"$comparison")" = "$release_marker_sha" ]
+            [ "$(jq -r '.status' <<<"$comparison")" = "ahead" ] ||
+              [ "$(jq -r '.status' <<<"$comparison")" = "identical" ]
+            if [ "$(jq -r '.status' <<<"$comparison")" = "ahead" ]; then
+              [ "$(jq '.files | length' <<<"$comparison")" = "1" ]
+              [ "$(jq -r '.files[0].filename' <<<"$comparison")" = ".github/workflows/promote-stable.yml" ]
+            fi
             [ "$draft_count" = "1" ]
             draft=$(jq '.[0]' <<<"$drafts")
           else
@@ -423,6 +431,7 @@ jobs:
               -f ref="refs/tags/$tag" \
               -f sha="$PUBLIC_MARKER_SHA" >/dev/null
             [ "$(gh api "repos/$PUBLIC_REPO/commits/$tag" --jq '.sha')" = "$PUBLIC_MARKER_SHA" ]
+            release_marker_sha="$PUBLIC_MARKER_SHA"
 
             assets=()
             while IFS= read -r path; do assets+=("$path"); done < <(
@@ -455,7 +464,7 @@ jobs:
             sleep 2
           done
           [ "$(jq -r '.immutable' <<<"$release")" = "true" ]
-          [ "$(gh api "repos/$PUBLIC_REPO/commits/$tag" --jq '.sha')" = "$PUBLIC_MARKER_SHA" ]
+          [ "$(gh api "repos/$PUBLIC_REPO/commits/$tag" --jq '.sha')" = "$release_marker_sha" ]
           assert_assets false "$release"
 
           mkdir -p "$RUNNER_TEMP/public-proof"
